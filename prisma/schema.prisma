@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -29,4 +26,70 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Incident {
+  id           Int      @id @default(autoincrement())
+  lat          Float
+  lng          Float
+  incidentType String
+  severity     String
+  description  String
+  vesselName   String?
+  vesselType   String?
+  vesselFlag   String?
+  occurredAt   DateTime
+  reportedAt   DateTime @default(now())
+  dataSource   String
+}
+
+model Vessel {
+  id         Int      @id @default(autoincrement())
+  mmsi       String   @unique
+  name       String
+  type       String
+  flag       String
+  lat        Float
+  lng        Float
+  speed      Float
+  heading    Float
+  isDark     Boolean
+  riskScore  Float
+  lastSeenAt DateTime
+}
+
+model RiskZone {
+  id            Int    @id @default(autoincrement())
+  name          String
+  centerLat     Float
+  centerLng     Float
+  riskLevel     Float
+  incidentCount Int
+  trend         String
+  zoneType      String
+}
+
+model Alert {
+  id                Int      @id @default(autoincrement())
+  severity          String
+  title             String
+  message           String
+  isRead            Boolean  @default(false)
+  relatedVesselMmsi String?
+  relatedIncidentId Int?
+  createdAt         DateTime @default(now())
+}
+
+model Detection {
+  id              Int      @id @default(autoincrement())
+  lat             Float
+  lng             Float
+  detectionType   String
+  confidence      Float
+  imageUrl        String?
+  sceneId         String?
+  vesselCount     Int
+  darkVesselCount Int
+  capturedAt      DateTime
+  createdAt       DateTime @default(now())
 }
