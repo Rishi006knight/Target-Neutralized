@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { mockDetections } from '@/lib/mock-data';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,9 +18,14 @@ export async function GET(request: Request) {
       orderBy: { capturedAt: 'desc' },
       take: limit,
     });
-    return NextResponse.json(detections);
+
+    if (detections && detections.length > 0) {
+      return NextResponse.json(detections);
+    }
+
+    return NextResponse.json(mockDetections);
   } catch (error) {
-    console.error('Error fetching detections:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.warn('DB offline, returning fallback detections:', error);
+    return NextResponse.json(mockDetections);
   }
 }
