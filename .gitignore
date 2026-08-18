@@ -13,6 +13,12 @@
 # production
 /build
 
+# Java Maven
+target/
+*.class
+*.jar
+*.war
+
 # misc
 .DS_Store
 *.pem

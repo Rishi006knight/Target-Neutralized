@@ -23,9 +23,12 @@ function getPieColor(name: string) {
 }
 
 function formatMonth(key: string) {
+  if (!key) return '';
   const [year, month] = key.split('-');
+  if (!month) return key;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[parseInt(month) - 1]} ${year.slice(2)}`;
+  const monthIdx = parseInt(month, 10) - 1;
+  return `${months[monthIdx] || ''} ${(year || '').slice(2)}`.trim();
 }
 
 interface DashboardPageProps {

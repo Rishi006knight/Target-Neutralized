@@ -18,9 +18,10 @@ interface IncidentsPageProps {
   incidents: Incident[];
   loading: boolean;
   onRefresh: () => void;
+  onCreateIncident?: (data: Partial<Incident>) => void;
 }
 
-export default function IncidentsPage({ incidents, loading, onRefresh }: IncidentsPageProps) {
+export default function IncidentsPage({ incidents, loading, onRefresh, onCreateIncident }: IncidentsPageProps) {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -33,14 +34,23 @@ export default function IncidentsPage({ incidents, loading, onRefresh }: Inciden
 
   const handleReportSubmit = async (data: Record<string, string>) => {
     try {
+      const incidentPayload = {
+        ...data,
+        lat: parseFloat(data.lat) || 0,
+        lng: parseFloat(data.lng) || 0,
+        occurredAt: new Date(data.occurredAt || Date.now()).toISOString(),
+        dataSource: data.dataSource || 'Manual Report',
+      };
+      if (onCreateIncident) {
+        onCreateIncident(incidentPayload as any);
+        onRefresh();
+        setIsReportOpen(false);
+        return;
+      }
       const res = await fetch('/api/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          occurredAt: new Date(data.occurredAt).toISOString(),
-          dataSource: data.dataSource || 'manual',
-        }),
+        body: JSON.stringify(incidentPayload),
       });
       if (res.ok) {
         onRefresh();

@@ -11,11 +11,12 @@ import type { Incident, Vessel, RiskZone } from '@/lib/mock-data';
 interface LeafletMapProps {
   incidents: Incident[];
   vessels: Vessel[];
+  liveVessels?: Vessel[];
   riskZones: RiskZone[];
   activeTab: string;
 }
 
-function LeafletMapInner({ incidents, vessels, riskZones, activeTab }: LeafletMapProps) {
+function LeafletMapInner({ incidents, vessels, liveVessels = [], riskZones, activeTab }: LeafletMapProps) {
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
@@ -54,7 +55,7 @@ function LeafletMapInner({ incidents, vessels, riskZones, activeTab }: LeafletMa
     );
   }
 
-  return <LeafletMapLoaded incidents={incidents} vessels={vessels} riskZones={riskZones} activeTab={activeTab} />;
+  return <LeafletMapLoaded incidents={incidents} vessels={vessels} liveVessels={liveVessels} riskZones={riskZones} activeTab={activeTab} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -62,16 +63,17 @@ const reactLeaflet = typeof window !== 'undefined' ? require('react-leaflet') : 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const leafletLib = typeof window !== 'undefined' ? require('leaflet') : null;
 
-function LeafletMapLoaded({ incidents, vessels, riskZones, activeTab }: LeafletMapProps) {
+function LeafletMapLoaded({ incidents, vessels, liveVessels = [], riskZones, activeTab }: LeafletMapProps) {
   if (!reactLeaflet || !leafletLib) return null;
   const { MapContainer, TileLayer, Marker, Popup, Circle } = reactLeaflet;
   const L = leafletLib;
 
   const renderIncidents = activeTab === 'all' || activeTab === 'incidents';
   const renderVessels = activeTab === 'all' || activeTab === 'vessels' || activeTab === 'dark';
+  const renderLiveVessels = activeTab === 'all' || activeTab === 'live';
 
-  const createVesselIcon = (isDark: boolean) => L.divIcon({
-    html: `<div style="width:10px;height:10px;transform:rotate(45deg);background:${isDark ? '#f59e0b' : 'hsl(196, 100%, 50%)'};border:1px solid rgba(0,0,0,0.5);box-shadow:0 0 6px rgba(0,0,0,0.5);"></div>`,
+  const createVesselIcon = (isDark: boolean, isLive: boolean = false) => L.divIcon({
+    html: `<div style="width:10px;height:10px;transform:rotate(45deg);background:${isDark ? '#f59e0b' : isLive ? '#10b981' : 'hsl(196, 100%, 50%)'};border:1px solid rgba(0,0,0,0.5);box-shadow:0 0 6px rgba(0,0,0,0.5);${isLive ? 'animation:pulse-glow 2s infinite;' : ''}"></div>`,
     className: '',
     iconSize: [10, 10],
     iconAnchor: [5, 5],
@@ -158,7 +160,7 @@ function LeafletMapLoaded({ incidents, vessels, riskZones, activeTab }: LeafletM
         <Marker
           key={`ves-${vessel.id}`}
           position={[vessel.lat, vessel.lng]}
-          icon={createVesselIcon(vessel.isDark)}
+          icon={createVesselIcon(vessel.isDark, false)}
         >
           <Popup>
             <div style={{ fontFamily: 'var(--app-font-sans, sans-serif)', minWidth: 200, fontSize: 12 }}>
@@ -177,6 +179,34 @@ function LeafletMapLoaded({ incidents, vessels, riskZones, activeTab }: LeafletM
           </Popup>
         </Marker>
       ))}
+
+      {/* Live Vessels */}
+      {renderLiveVessels && liveVessels.map(vessel => (
+        <Marker
+          key={`live-${vessel.id}`}
+          position={[vessel.lat, vessel.lng]}
+          icon={createVesselIcon(false, true)}
+        >
+          <Popup>
+            <div style={{ fontFamily: 'var(--app-font-sans, sans-serif)', minWidth: 200, fontSize: 12 }}>
+              <div style={{ fontFamily: 'monospace', color: '#10b981', marginBottom: 4, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                LIVE AIS
+              </div>
+              <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{vessel.name}</div>
+              <div style={{ color: '#888', marginBottom: 8, fontSize: 11, textTransform: 'uppercase' }}>{vessel.type.replace(/_/g, ' ')} &middot; {vessel.flag}</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>MMSI:</span><span>{vessel.mmsi}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>SPEED:</span><span>{vessel.speed.toFixed(1)} kts</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>HDG:</span><span>{vessel.heading}&deg;</span></div>
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
     </MapContainer>
   );
 }
@@ -184,11 +214,12 @@ function LeafletMapLoaded({ incidents, vessels, riskZones, activeTab }: LeafletM
 interface MapPageProps {
   incidents: Incident[];
   vessels: Vessel[];
+  liveVessels?: Vessel[];
   riskZones: RiskZone[];
   loading: boolean;
 }
 
-export default function MapPage({ incidents, vessels, riskZones, loading }: MapPageProps) {
+export default function MapPage({ incidents, vessels, liveVessels = [], riskZones, loading }: MapPageProps) {
   const [activeTab, setActiveTab] = useState<string>('all');
 
   if (loading) {
@@ -209,17 +240,18 @@ export default function MapPage({ incidents, vessels, riskZones, loading }: MapP
         </div>
 
         <div className="flex bg-card border border-border rounded-md p-1 font-mono text-xs">
-          {['all', 'incidents', 'vessels', 'dark'].map(tab => (
+          {['all', 'incidents', 'vessels', 'dark', 'live'].map(tab => (
             <button
               key={tab}
               className={`px-3 py-1.5 rounded transition-colors flex items-center gap-1 ${
                 activeTab === tab
-                  ? tab === 'dark' ? 'bg-amber-500 text-black' : 'bg-primary text-primary-foreground'
-                  : tab === 'dark' ? 'text-amber-500/70 hover:text-amber-400' : 'text-muted-foreground hover:text-foreground'
+                  ? tab === 'dark' ? 'bg-amber-500 text-black' : tab === 'live' ? 'bg-emerald-500 text-black' : 'bg-primary text-primary-foreground'
+                  : tab === 'dark' ? 'text-amber-500/70 hover:text-amber-400' : tab === 'live' ? 'text-emerald-500/70 hover:text-emerald-400' : 'text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab(tab)}
             >
               {tab === 'dark' && <AlertCircle className="w-3 h-3" />}
+              {tab === 'live' && <span className="w-2 h-2 rounded-full bg-current animate-pulse" />}
               {tab.toUpperCase()}
             </button>
           ))}
@@ -230,12 +262,14 @@ export default function MapPage({ incidents, vessels, riskZones, loading }: MapP
         <LeafletMapInner
           incidents={incidents}
           vessels={vessels}
+          liveVessels={liveVessels}
           riskZones={riskZones}
           activeTab={activeTab}
         />
 
         {/* Tactical legend overlay */}
         <div className="absolute top-4 right-4 z-[1000] bg-black/70 border border-border backdrop-blur-md p-3 rounded-md font-mono text-[10px] text-muted-foreground space-y-2 pointer-events-none">
+          <div className="flex items-center gap-2"><div className="w-2 h-2 bg-emerald-500 pulse-glow" /> LIVE AIS</div>
           <div className="flex items-center gap-2"><div className="w-2 h-2 bg-primary" /> ACTIVE VESSEL</div>
           <div className="flex items-center gap-2"><div className="w-2 h-2 bg-amber-500" /> DARK VESSEL</div>
           <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500" /> CRITICAL INCIDENT</div>
