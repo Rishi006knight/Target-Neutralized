@@ -36,7 +36,7 @@ interface AppLayoutProps {
   onGlobalSearch?: (query: string) => void;
 }
 
-export default function AppLayout({
+export function AppLayout({
   children,
   activePage,
   onNavigate,
@@ -311,3 +311,5 @@ export default function AppLayout({
     </div>
   );
 }
+
+export default AppLayout;
