@@ -36,7 +36,7 @@ interface AppLayoutProps {
   onGlobalSearch?: (query: string) => void;
 }
 
-export function AppLayout({
+export default function AppLayout({
   children,
   activePage,
   onNavigate,
@@ -88,7 +88,7 @@ export function AppLayout({
         aria-label="Main Command Navigation"
       >
         {/* Brand Logo & Title */}
-        <div className="p-4 lg:p-5 flex items-center gap-3 border-b border-slate-800/60">
+        <div className="p-4 lg:p-5 flex items-center gap-3 border-b border-slate-800/60 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/40 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(0,229,255,0.25)]">
             <Shield className="w-5 h-5 text-cyan-400" />
           </div>
@@ -110,8 +110,9 @@ export function AppLayout({
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => onNavigate(item.id)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-mono font-medium transition-all w-full text-left group relative ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-mono font-medium transition-all w-full text-left group relative cursor-pointer ${
                   isActive
                     ? 'active-nav-glow text-cyan-300'
                     : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
@@ -143,7 +144,7 @@ export function AppLayout({
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-slate-800/80 hidden lg:block text-[10px] font-mono text-slate-500">
+        <div className="p-3 border-t border-slate-800/80 hidden lg:block text-[10px] font-mono text-slate-500 shrink-0">
           <div className="flex items-center justify-between">
             <span>GRID SYSTEM</span>
             <span className="text-cyan-400">v2.4.0-SEC</span>
@@ -181,11 +182,12 @@ export function AppLayout({
                 return (
                   <button
                     key={item.id}
+                    type="button"
                     onClick={() => {
                       onNavigate(item.id);
                       setMobileDrawerOpen(false);
                     }}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-mono font-medium transition-all w-full text-left ${
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-mono font-medium transition-all w-full text-left cursor-pointer ${
                       isActive
                         ? 'active-nav-glow text-cyan-300'
                         : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
@@ -207,14 +209,15 @@ export function AppLayout({
       )}
 
       {/* Main Command Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         {/* Top Header Bar */}
         <header className="h-14 border-b border-slate-800/80 glass-panel flex items-center justify-between px-4 lg:px-6 shrink-0 z-20">
           <div className="flex items-center gap-3">
             {/* Mobile Hamburger Button */}
             <button
+              type="button"
               onClick={() => setMobileDrawerOpen(true)}
-              className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg focus:outline-none"
+              className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg focus:outline-none cursor-pointer"
               aria-label="Open Navigation Menu"
             >
               <Menu className="w-5 h-5" />
@@ -237,8 +240,9 @@ export function AppLayout({
           <div className="flex items-center gap-3 font-mono text-xs">
             {/* Notification Bell with Red Dot Badge */}
             <button
+              type="button"
               onClick={() => onNavigate('alerts')}
-              className="relative p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800/60 transition-colors"
+              className="relative p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800/60 transition-colors cursor-pointer"
               aria-label={`Alert Notifications (${unreadAlertsCount} unread)`}
             >
               <Bell className="w-4 h-4" />
@@ -295,13 +299,13 @@ export function AppLayout({
           </div>
         </div>
 
-        {/* Main Content Area */}
+        {/* Main Scrollable Content Area */}
         <main
           id="main-content"
           role="main"
-          className="flex-1 overflow-auto p-4 md:p-6 scanline-overlay relative"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 relative"
         >
-          <div className="max-w-7xl mx-auto w-full h-full flex flex-col">{children}</div>
+          <div className="max-w-7xl mx-auto w-full min-h-full flex flex-col pb-16">{children}</div>
         </main>
       </div>
     </div>
