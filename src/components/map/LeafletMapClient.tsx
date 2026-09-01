@@ -16,10 +16,10 @@ interface LeafletMapClientProps {
 }
 
 export default function LeafletMapClient({
-  incidents,
-  vessels,
+  incidents = [],
+  vessels = [],
   liveVessels = [],
-  riskZones,
+  riskZones = [],
   activeTab,
 }: LeafletMapClientProps) {
   useEffect(() => {
@@ -58,22 +58,26 @@ export default function LeafletMapClient({
     });
   };
 
-  const filteredVessels = activeTab === 'dark' ? vessels.filter((v) => v.isDark) : vessels;
+  const filteredVessels = activeTab === 'dark' ? (vessels || []).filter((v) => v.isDark) : (vessels || []);
 
   return (
     <MapContainer
       center={[5, 45]}
       zoom={3}
-      style={{ height: '100%', width: '100%', background: '#0c1220' }}
+      style={{ height: '100%', width: '100%', background: '#0a0f1d' }}
       zoomControl={false}
+      minZoom={2}
+      maxZoom={12}
     >
+      {/* High-Performance Clean Dark Tactical Basemap without Watermarks */}
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Tactical Maritime Base'
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+        maxZoom={12}
       />
 
       {/* Risk Zones */}
-      {riskZones.map((zone) => (
+      {(riskZones || []).map((zone) => (
         <Circle
           key={`zone-${zone.id}`}
           center={[zone.centerLat, zone.centerLng]}
@@ -81,7 +85,7 @@ export default function LeafletMapClient({
           pathOptions={{
             color: zone.riskLevel > 0.7 ? '#ef4444' : '#eab308',
             fillColor: zone.riskLevel > 0.7 ? '#ef4444' : '#eab308',
-            fillOpacity: 0.1,
+            fillOpacity: 0.12,
             weight: 1.5,
             dashArray: '6, 6',
           }}
@@ -115,7 +119,7 @@ export default function LeafletMapClient({
 
       {/* Incidents */}
       {renderIncidents &&
-        incidents.map((incident) => (
+        (incidents || []).map((incident) => (
           <Marker
             key={`inc-${incident.id}`}
             position={[incident.lat, incident.lng]}
@@ -130,7 +134,7 @@ export default function LeafletMapClient({
                   {incident.incidentType.replace(/_/g, ' ').toUpperCase()}
                 </div>
                 <div style={{ color: '#888', marginBottom: 8, fontSize: 11 }}>
-                  {new Date(incident.occurredAt).toUTCString()}
+                  {incident.occurredAt ? new Date(incident.occurredAt).toUTCString() : 'Recent'}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -175,7 +179,7 @@ export default function LeafletMapClient({
                 </div>
                 <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{vessel.name}</div>
                 <div style={{ color: '#888', marginBottom: 8, fontSize: 11, textTransform: 'uppercase' }}>
-                  {vessel.type.replace(/_/g, ' ')} &middot; {vessel.flag}
+                  {vessel.type ? vessel.type.replace(/_/g, ' ') : 'Transit'} &middot; {vessel.flag || 'Intl'}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -184,16 +188,21 @@ export default function LeafletMapClient({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>SPEED:</span>
-                    <span>{vessel.speed.toFixed(1)} kts</span>
+                    <span>{(vessel.speed || 0).toFixed(1)} kts</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>HEADING:</span>
-                    <span>{vessel.heading}&deg;</span>
+                    <span>{vessel.heading || 0}&deg;</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>THREAT SCORE:</span>
-                    <span style={{ color: vessel.riskScore > 0.7 ? '#ef4444' : '#10b981', fontWeight: 'bold' }}>
-                      {(vessel.riskScore * 100).toFixed(0)}%
+                    <span
+                      style={{
+                        color: (vessel.riskScore || 0) > 0.7 ? '#ef4444' : '#10b981',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {((vessel.riskScore || 0) * 100).toFixed(0)}%
                     </span>
                   </div>
                 </div>
@@ -204,7 +213,7 @@ export default function LeafletMapClient({
 
       {/* Live AIS Stream Vessels */}
       {renderLiveVessels &&
-        liveVessels.map((vessel) => (
+        (liveVessels || []).map((vessel) => (
           <Marker
             key={`live-${vessel.id || vessel.mmsi}`}
             position={[vessel.lat, vessel.lng]}
@@ -223,12 +232,20 @@ export default function LeafletMapClient({
                     gap: '4px',
                   }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block' }}></span>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: '#10b981',
+                      display: 'inline-block',
+                    }}
+                  ></span>
                   LIVE AIS TELEMETRY
                 </div>
                 <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{vessel.name}</div>
                 <div style={{ color: '#888', marginBottom: 8, fontSize: 11, textTransform: 'uppercase' }}>
-                  {vessel.type.replace(/_/g, ' ')} &middot; {vessel.flag}
+                  {vessel.type ? vessel.type.replace(/_/g, ' ') : 'Transit'} &middot; {vessel.flag || 'Intl'}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -237,11 +254,11 @@ export default function LeafletMapClient({
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>SPEED:</span>
-                    <span>{vessel.speed.toFixed(1)} kts</span>
+                    <span>{(vessel.speed || 0).toFixed(1)} kts</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>HEADING:</span>
-                    <span>{vessel.heading}&deg;</span>
+                    <span>{vessel.heading || 0}&deg;</span>
                   </div>
                 </div>
               </div>
