@@ -1,17 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -29,6 +21,13 @@ import {
   ChevronLeft,
   Ship,
   FileSpreadsheet,
+  MapPin,
+  MoreVertical,
+  ArrowUpDown,
+  X,
+  CheckSquare,
+  Square,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getSeverityColor, formatCoordinate } from '@/lib/utils-maritime';
@@ -43,17 +42,7 @@ interface IncidentsPageProps {
   onRefresh: () => void;
   onCreateIncident?: (data: Partial<Incident>) => void;
   onSelectVesselMmsi?: (mmsi: string) => void;
-}
-
-function safeFormatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'Recent';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return 'Recent';
-    return d.toISOString().replace('T', ' ').substring(0, 16);
-  } catch {
-    return 'Recent';
-  }
+  onNavigateMap?: () => void;
 }
 
 export default function IncidentsPage({
@@ -63,33 +52,66 @@ export default function IncidentsPage({
   onRefresh,
   onCreateIncident,
   onSelectVesselMmsi,
+  onNavigateMap,
 }: IncidentsPageProps) {
+  const [search, setSearch] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [search, setSearch] = useState<string>('');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState<'severity' | 'occurredAt' | 'vesselName'>('occurredAt');
+  const [sortAsc, setSortAsc] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const pageSize = 10;
 
-  const filtered = (incidents || []).filter((inc) => {
-    if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
-    if (typeFilter !== 'all' && inc.incidentType !== typeFilter) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const matchVessel = inc.vesselName?.toLowerCase().includes(q) || false;
-      const matchDesc = inc.description?.toLowerCase().includes(q) || false;
-      const matchType = inc.incidentType?.toLowerCase().includes(q) || false;
-      return matchVessel || matchDesc || matchType;
-    }
-    return true;
-  });
+  // Filtered & Sorted Incidents
+  const filtered = useMemo(() => {
+    return (incidents || []).filter((inc) => {
+      if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
+      if (typeFilter !== 'all' && inc.incidentType !== typeFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const matchVessel = inc.vesselName?.toLowerCase().includes(q) || false;
+        const matchDesc = inc.description?.toLowerCase().includes(q) || false;
+        const matchType = inc.incidentType?.toLowerCase().includes(q) || false;
+        return matchVessel || matchDesc || matchType;
+      }
+      return true;
+    }).sort((a, b) => {
+      if (sortField === 'occurredAt') {
+        const diff = new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
+        return sortAsc ? -diff : diff;
+      }
+      if (sortField === 'vesselName') {
+        const diff = (a.vesselName || '').localeCompare(b.vesselName || '');
+        return sortAsc ? diff : -diff;
+      }
+      return 0;
+    });
+  }, [incidents, severityFilter, typeFilter, search, sortField, sortAsc]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const startIndex = (currentPage - 1) * pageSize;
-  const paginatedIncidents = filtered.slice(startIndex, startIndex + pageSize);
+  const paginated = filtered.slice(startIndex, startIndex + pageSize);
 
-  // CSV Export Functionality
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else {
+      setSortField(field);
+      setSortAsc(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === paginated.length) setSelectedIds([]);
+    else setSelectedIds(paginated.map((i) => i.id));
+  };
+
+  const toggleSelectRow = (id: number) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
   const exportCSV = () => {
     const headers = ['ID', 'Severity', 'Type', 'Vessel', 'Latitude', 'Longitude', 'OccurredAt', 'Source', 'Description'];
     const rows = filtered.map((i) => [
@@ -105,134 +127,59 @@ export default function IncidentsPage({
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `oceanshield_incidents_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', `oceanshield_incidents_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Incident log exported as CSV.');
-  };
-
-  // PDF Export Functionality (Printable HTML Document)
-  const exportPDF = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Popup blocked. Please enable popups to export PDF.');
-      return;
-    }
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>OceanShield OPS — Tactical Incident Summary</title>
-          <style>
-            body { font-family: monospace; padding: 24px; color: #111; }
-            h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 8px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 11px; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-            th { background-color: #f0f0f0; }
-            .critical { color: #dc2626; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <h1>OCEANSHIELD OPS — MARITIME INCIDENT INTELLIGENCE REPORT</h1>
-          <p>Generated: ${new Date().toUTCString()} | Total Events: ${filtered.length}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th><th>Severity</th><th>Type</th><th>Vessel Target</th><th>Location</th><th>Source</th><th>Occurred At</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filtered
-                .map(
-                  (i) => `
-                <tr>
-                  <td>#${i.id}</td>
-                  <td class="${i.severity}">${i.severity.toUpperCase()}</td>
-                  <td>${i.incidentType.toUpperCase()}</td>
-                  <td>${i.vesselName || 'UNKNOWN'}</td>
-                  <td>${i.lat.toFixed(2)}N, ${i.lng.toFixed(2)}E</td>
-                  <td>${i.dataSource}</td>
-                  <td>${safeFormatDate(i.occurredAt)}</td>
-                </tr>
-              `
-                )
-                .join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
-    toast.success('Incident PDF summary report generated.');
+    toast.success(`Exported ${filtered.length} incidents as CSV.`);
   };
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      {/* Header Bar */}
+    <div className="space-y-4 h-full flex flex-col relative">
+      {/* 4.0 Header & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold font-display tracking-wide text-white">
-            Incident Intelligence Log
+          <h1 className="text-2xl font-bold font-display tracking-wider text-white flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#FF3B5C] shadow-[0_0_8px_#FF3B5C]" />
+            INCIDENT INTELLIGENCE DESK
           </h1>
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">
-            RECORDED PIRACY INCIDENTS, ARMED BOARDINGS, &amp; RADAR DROPOUTS
+          <p className="text-xs text-[#64748B] font-mono mt-0.5">
+            ARMED BOARDINGS &middot; SKIFF INTERCEPTS &middot; SITUATION LOGS
           </p>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Export Dropdown / Buttons */}
           <Button
             size="sm"
             variant="outline"
             onClick={exportCSV}
-            className="h-8 font-mono text-xs gap-1.5 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300"
+            className="h-8 font-mono text-xs gap-1.5 border-slate-700 bg-[#111827] hover:bg-[#1A2332] text-slate-300 cursor-pointer"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
-            <span>CSV</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#00E5FF]" />
+            <span>EXPORT CSV</span>
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={exportPDF}
-            className="h-8 font-mono text-xs gap-1.5 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300"
-          >
-            <Download className="w-3.5 h-3.5 text-cyan-400" />
-            <span>PDF</span>
-          </Button>
-
-          {/* Report Incident Multi-step Trigger */}
           <Button
             size="sm"
             onClick={() => setIsReportOpen(true)}
-            className="h-8 font-mono text-xs tracking-wider gap-1.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold shadow-[0_0_12px_rgba(0,229,255,0.3)]"
+            className="h-8 font-mono text-xs tracking-wider gap-1.5 bg-[#00E5FF] hover:bg-[#00E5FF]/80 text-black font-bold shadow-[0_0_12px_rgba(0,229,255,0.4)] cursor-pointer"
           >
             <Plus className="w-4 h-4" /> REPORT INCIDENT
           </Button>
         </div>
       </div>
 
-      {/* Main Table Card */}
-      <Card className="glass-panel-card border-border flex flex-col min-h-0 flex-1">
-        {/* Filters Strip */}
-        <div className="p-3.5 border-b border-slate-800 flex items-center gap-3 bg-slate-900/40 shrink-0 flex-wrap">
-          <div className="relative flex-1 max-w-sm min-w-[200px]">
+      {/* 4.1 Advanced Filter Bar */}
+      <Card className="glass-panel-card border-[rgba(0,229,255,0.08)] p-3 space-y-3 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Debounced Search */}
+          <div className="relative w-full max-w-sm min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <Input
               placeholder="Search target vessel, type, or description..."
-              className="pl-8 h-8 font-mono text-xs bg-[#0c1322] border-slate-700 text-white placeholder:text-slate-500 rounded-lg"
+              className="pl-8 h-8 font-mono text-xs bg-[#0A0E17] border-slate-700 text-white placeholder:text-slate-500 rounded-lg focus:border-[#00E5FF]"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -241,152 +188,184 @@ export default function IncidentsPage({
             />
           </div>
 
-          <Select
-            value={severityFilter}
-            onValueChange={(v) => {
-              setSeverityFilter(v);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[140px] h-8 font-mono text-xs bg-[#0c1322] border-slate-700 text-slate-200">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0c1322] border-slate-700 text-white font-mono text-xs">
-              <SelectItem value="all">ALL SEVERITIES</SelectItem>
-              <SelectItem value="critical">CRITICAL</SelectItem>
-              <SelectItem value="high">HIGH</SelectItem>
-              <SelectItem value="medium">MEDIUM</SelectItem>
-              <SelectItem value="low">LOW</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={typeFilter}
-            onValueChange={(v) => {
-              setTypeFilter(v);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[140px] h-8 font-mono text-xs bg-[#0c1322] border-slate-700 text-slate-200">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0c1322] border-slate-700 text-white font-mono text-xs">
-              <SelectItem value="all">ALL TYPES</SelectItem>
-              <SelectItem value="hijack">HIJACK</SelectItem>
-              <SelectItem value="boarding">BOARDING</SelectItem>
-              <SelectItem value="suspicious">SUSPICIOUS</SelectItem>
-              <SelectItem value="approach">APPROACH</SelectItem>
-              <SelectItem value="ais_gap">AIS GAP</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Severity Pills with Count Badges */}
+          <div className="flex items-center gap-1.5 overflow-x-auto font-mono text-xs">
+            {[
+              { id: 'all', label: 'ALL', count: incidents.length },
+              { id: 'critical', label: 'CRITICAL', count: incidents.filter((i) => i.severity === 'critical').length },
+              { id: 'high', label: 'HIGH', count: incidents.filter((i) => i.severity === 'high').length },
+              { id: 'medium', label: 'MEDIUM', count: incidents.filter((i) => i.severity === 'medium').length },
+            ].map((sev) => (
+              <button
+                key={sev.id}
+                type="button"
+                onClick={() => {
+                  setSeverityFilter(sev.id);
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  severityFilter === sev.id
+                    ? 'bg-[#00E5FF] text-black shadow-[0_0_8px_rgba(0,229,255,0.4)]'
+                    : 'bg-[#0A0E17] text-[#64748B] hover:text-white border border-slate-800'
+                }`}
+              >
+                <span>{sev.label}</span>
+                <span className={`px-1 rounded-full text-[9px] ${severityFilter === sev.id ? 'bg-black/30 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                  {sev.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Responsive Table Wrapper */}
+        {/* Active Filter Chips & Result Counter */}
+        <div className="flex items-center justify-between text-[11px] font-mono text-[#64748B] pt-1 border-t border-slate-800/60">
+          <div className="flex items-center gap-2">
+            <span>SHOWING {filtered.length} OF {incidents.length} INCIDENTS</span>
+            {(severityFilter !== 'all' || search) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSeverityFilter('all');
+                  setSearch('');
+                  setCurrentPage(1);
+                }}
+                className="text-[#00E5FF] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                Clear Filters <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <span className="text-[10px] text-slate-500 hidden sm:inline">SORT: {sortField.toUpperCase()} ({sortAsc ? 'ASC' : 'DESC'})</span>
+        </div>
+      </Card>
+
+      {/* 4.2 Data Grid Table */}
+      <Card className="glass-panel-card border-[rgba(0,229,255,0.08)] flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="flex-1 overflow-auto">
           <Table>
-            <TableHeader className="bg-slate-900/80 sticky top-0 z-10 backdrop-blur-md">
+            <TableHeader className="bg-[#111827] sticky top-0 z-20 backdrop-blur-xl border-b border-slate-800">
               <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="font-mono text-xs w-[100px] text-cyan-400">SEVERITY</TableHead>
-                <TableHead className="font-mono text-xs w-[140px] hidden sm:table-cell text-cyan-400">
-                  DATE / TIME
+                <TableHead className="w-10">
+                  <button type="button" onClick={toggleSelectAll} className="cursor-pointer text-slate-400">
+                    {selectedIds.length === paginated.length && paginated.length > 0 ? (
+                      <CheckSquare className="w-4 h-4 text-[#00E5FF]" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
                 </TableHead>
-                <TableHead className="font-mono text-xs w-[130px] text-cyan-400">CATEGORY</TableHead>
-                <TableHead className="font-mono text-xs text-cyan-400">TARGET ASSET</TableHead>
-                <TableHead className="font-mono text-xs w-[170px] hidden lg:table-cell text-cyan-400">
+                <TableHead className="font-mono text-xs w-[100px] text-[#00E5FF]">SEVERITY</TableHead>
+                <TableHead
+                  onClick={() => toggleSort('occurredAt')}
+                  className="font-mono text-xs w-[130px] text-[#00E5FF] cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>DATE / TIME</span>
+                    <ArrowUpDown className="w-3 h-3" />
+                  </div>
+                </TableHead>
+                <TableHead className="font-mono text-xs w-[140px] text-[#00E5FF]">CATEGORY</TableHead>
+                <TableHead
+                  onClick={() => toggleSort('vesselName')}
+                  className="font-mono text-xs text-[#00E5FF] cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>TARGET ASSET</span>
+                    <ArrowUpDown className="w-3 h-3" />
+                  </div>
+                </TableHead>
+                <TableHead className="font-mono text-xs w-[180px] hidden lg:table-cell text-[#00E5FF]">
                   POSITION
                 </TableHead>
-                <TableHead className="font-mono text-xs w-[110px] hidden md:table-cell text-cyan-400">
+                <TableHead className="font-mono text-xs w-[120px] hidden md:table-cell text-[#00E5FF]">
                   SOURCE
                 </TableHead>
-                <TableHead className="w-[40px]"></TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i} className="border-slate-800">
-                    <TableCell>
-                      <Skeleton className="h-6 w-16 bg-slate-800" />
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Skeleton className="h-4 w-24 bg-slate-800" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-20 bg-slate-800" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-32 bg-slate-800" />
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <Skeleton className="h-4 w-28 bg-slate-800" />
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <Skeleton className="h-4 w-16 bg-slate-800" />
-                    </TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                ))
-              ) : paginatedIncidents.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-slate-500 font-mono text-xs">
-                    NO RECORDED INCIDENTS MATCHING CRITERIA
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedIncidents.map((incident) => (
+              {paginated.map((incident, idx) => {
+                const isSelected = selectedIds.includes(incident.id);
+                return (
                   <TableRow
                     key={incident.id}
-                    onClick={() => setSelectedIncident(incident)}
-                    className="border-slate-800 hover:bg-slate-800/40 cursor-pointer group transition-colors"
+                    className={`border-slate-800/80 cursor-pointer group transition-colors duration-200 ${
+                      idx % 2 === 1 ? 'bg-white/[0.01]' : 'bg-transparent'
+                    } ${isSelected ? 'bg-[#00E5FF]/10' : 'hover:bg-[#00E5FF]/[0.04]'}`}
                   >
-                    <TableCell>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getSeverityColor(
-                          incident.severity
-                        )}`}
-                      >
-                        {incident.severity}
-                      </span>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => toggleSelectRow(incident.id)} className="cursor-pointer">
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-[#00E5FF]" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-600" />
+                        )}
+                      </button>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-400 hidden sm:table-cell">
-                      {safeFormatDate(incident.occurredAt)}
+
+                    <TableCell onClick={() => setSelectedIncident(incident)}>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            incident.severity === 'critical' ? 'bg-[#FF3B5C]' : 'bg-[#FFB020]'
+                          }`}
+                        />
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getSeverityColor(
+                            incident.severity
+                          )}`}
+                        >
+                          {incident.severity}
+                        </span>
+                      </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs font-bold text-slate-200">
+
+                    <TableCell onClick={() => setSelectedIncident(incident)} className="font-mono text-xs text-slate-400">
+                      {new Date(incident.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} UTC
+                    </TableCell>
+
+                    <TableCell onClick={() => setSelectedIncident(incident)} className="font-heading font-bold text-xs text-white">
                       {incident.incidentType.replace(/_/g, ' ').toUpperCase()}
                     </TableCell>
-                    <TableCell>
-                      <div className="font-bold text-sm text-white group-hover:text-cyan-400 transition-colors">
+
+                    <TableCell onClick={() => setSelectedIncident(incident)}>
+                      <div className="font-display font-bold text-xs text-white group-hover:text-[#00E5FF] transition-colors">
                         {incident.vesselName || 'UNKNOWN ASSET'}
                       </div>
-                      {incident.vesselType && (
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5 uppercase">
-                          {incident.vesselType} &middot; {incident.vesselFlag || 'Intl'}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-400 hidden lg:table-cell">
-                      {formatCoordinate(incident.lat, true)}, {formatCoordinate(incident.lng, false)}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                        <FileText className="w-3 h-3 text-cyan-400" />
-                        <span className="font-mono text-[11px] truncate max-w-[120px]">{incident.dataSource}</span>
+                      <div className="text-[10px] text-[#64748B] font-mono mt-0.5 uppercase">
+                        {incident.vesselType || 'Commercial'} &middot; {incident.vesselFlag || 'Intl'}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+
+                    <TableCell onClick={() => setSelectedIncident(incident)} className="font-mono text-xs text-slate-400 hidden lg:table-cell">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-[#00E5FF]/70" />
+                        <span>
+                          {formatCoordinate(incident.lat, true)}, {formatCoordinate(incident.lng, false)}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell onClick={() => setSelectedIncident(incident)} className="hidden md:table-cell font-mono text-[11px] text-slate-400 truncate max-w-[120px]">
+                      {incident.dataSource}
+                    </TableCell>
+
+                    <TableCell onClick={() => setSelectedIncident(incident)}>
+                      <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-[#00E5FF] transition-all group-hover:translate-x-0.5" />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
+                );
+              })}
             </TableBody>
           </Table>
         </div>
 
-        {/* Pagination Bar */}
-        <div className="p-3 border-t border-slate-800 flex items-center justify-between bg-slate-900/60 font-mono text-xs text-slate-400 shrink-0">
+        {/* Pagination Strip */}
+        <div className="p-3 border-t border-slate-800 flex items-center justify-between bg-[#111827]/90 font-mono text-xs text-[#64748B] shrink-0">
           <span>
-            Showing {filtered.length > 0 ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, filtered.length)} of {filtered.length} incidents
+            PAGE {currentPage} OF {totalPages} ({filtered.length} TOTAL)
           </span>
 
           <div className="flex items-center gap-1">
@@ -395,36 +374,33 @@ export default function IncidentsPage({
               variant="outline"
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="h-7 w-7 p-0 border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-30"
+              className="h-7 w-7 p-0 border-slate-800 bg-[#0A0E17] text-slate-300"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
 
-            {Array.from({ length: totalPages }).map((_, i) => {
-              const pageNum = i + 1;
-              return (
-                <Button
-                  key={pageNum}
-                  size="sm"
-                  variant={currentPage === pageNum ? 'default' : 'outline'}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`h-7 w-7 p-0 font-mono text-xs ${
-                    currentPage === pageNum
-                      ? 'bg-cyan-500 text-black font-bold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {pageNum}
-                </Button>
-              );
-            })}
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Button
+                key={i + 1}
+                size="sm"
+                variant={currentPage === i + 1 ? 'default' : 'outline'}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`h-7 w-7 p-0 font-mono text-xs ${
+                  currentPage === i + 1
+                    ? 'bg-[#00E5FF] text-black font-bold'
+                    : 'border-slate-800 bg-[#0A0E17] text-slate-400'
+                }`}
+              >
+                {i + 1}
+              </Button>
+            ))}
 
             <Button
               size="sm"
               variant="outline"
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="h-7 w-7 p-0 border-slate-800 bg-slate-900 text-slate-300 disabled:opacity-30"
+              className="h-7 w-7 p-0 border-slate-800 bg-[#0A0E17] text-slate-300"
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -432,16 +408,37 @@ export default function IncidentsPage({
         </div>
       </Card>
 
-      {/* Multi-Step Report Incident Modal */}
-      <ReportIncidentModal
-        isOpen={isReportOpen}
-        onClose={() => setIsReportOpen(false)}
-        vessels={vessels}
-        onSubmitIncident={(payload) => {
-          if (onCreateIncident) onCreateIncident(payload);
-          if (onRefresh) onRefresh();
-        }}
-      />
+      {/* 4.5 Floating Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#111827] border border-[#00E5FF]/40 px-5 py-2.5 rounded-full shadow-2xl font-mono text-xs flex items-center gap-4 animate-in slide-in-from-bottom-4 duration-200">
+          <span className="text-white font-bold">{selectedIds.length} INCIDENTS SELECTED</span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => toast.success(`Exported ${selectedIds.length} selected incidents.`)}
+              className="bg-[#00E5FF] text-black font-bold text-xs h-7 px-3 rounded-full"
+            >
+              EXPORT SELECTED
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toast.success('Assigned to Task Force 151.')}
+              className="border-slate-700 text-slate-300 text-xs h-7 px-3 rounded-full"
+            >
+              ASSIGN
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds([])}
+              className="text-slate-500 hover:text-white h-7 w-7 p-0 rounded-full"
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Incident Detail Modal */}
       <IncidentDetailModal
@@ -454,6 +451,21 @@ export default function IncidentsPage({
             const v = vessels.find((ves) => ves.name === name);
             if (v) onSelectVesselMmsi(v.mmsi);
           }
+        }}
+        onTrackOnMap={() => {
+          setSelectedIncident(null);
+          if (onNavigateMap) onNavigateMap();
+        }}
+      />
+
+      {/* Report Incident Modal */}
+      <ReportIncidentModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        vessels={vessels}
+        onSubmitIncident={(payload) => {
+          if (onCreateIncident) onCreateIncident(payload);
+          if (onRefresh) onRefresh();
         }}
       />
     </div>

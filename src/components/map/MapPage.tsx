@@ -4,31 +4,31 @@ import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 import {
-  AlertCircle,
-  Flame,
-  Satellite,
-  ChevronDown,
-  ChevronUp,
-  Bell,
-  Clock,
   Layers,
+  Compass,
+  Ruler,
+  Maximize2,
+  Plus,
+  Minus,
+  Satellite,
+  Flame,
+  AlertTriangle,
+  Ship,
+  Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { mockSatellitePasses, type Incident, type Vessel, type RiskZone } from '@/lib/mock-data';
 
-// Dynamically import Leaflet map with ssr: false and radar sweep loading animation
 const LeafletMapClient = dynamic(() => import('./LeafletMapClient'), {
   ssr: false,
   loading: () => (
-    <div className="h-full w-full flex items-center justify-center bg-[#060b14]">
+    <div className="h-full w-full flex items-center justify-center bg-[#0A0E17]">
       <div className="flex flex-col items-center gap-4">
-        {/* Radar Sweep Loading Animation */}
-        <div className="relative w-20 h-20 rounded-full border border-cyan-500/40 bg-cyan-950/20 flex items-center justify-center overflow-hidden">
-          <div className="absolute inset-0 rounded-full border border-cyan-500/20" />
-          <div className="w-12 h-12 rounded-full border border-cyan-500/30" />
-          <div className="w-4 h-4 rounded-full bg-cyan-400" />
-          {/* Rotating Radar Sweep Cone */}
+        <div className="relative w-20 h-20 rounded-full border border-[#00E5FF]/40 bg-[#00E5FF]/10 flex items-center justify-center overflow-hidden">
+          <div className="w-12 h-12 rounded-full border border-[#00E5FF]/30" />
+          <div className="w-4 h-4 rounded-full bg-[#00E5FF]" />
           <div
             className="absolute inset-0 radar-sweep-anim"
             style={{
@@ -36,8 +36,8 @@ const LeafletMapClient = dynamic(() => import('./LeafletMapClient'), {
             }}
           />
         </div>
-        <span className="font-mono text-xs text-cyan-400 tracking-widest animate-pulse">
-          ACQUIRING SATELLITE RADAR GRID...
+        <span className="font-mono text-xs text-[#00E5FF] tracking-widest animate-pulse">
+          INITIALIZING SATELLITE RADAR GRID...
         </span>
       </div>
     </div>
@@ -63,184 +63,204 @@ export default function MapPage({
   onSelectVessel,
   onSelectIncident,
 }: MapPageProps) {
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showSatelliteSchedule, setShowSatelliteSchedule] = useState(false);
-  const [reminders, setReminders] = useState<Record<string, boolean>>({});
+  const [layers, setLayers] = useState({
+    vessels: true,
+    incidents: true,
+    darkContacts: true,
+    riskZones: true,
+    heatmap: false,
+    satellite: true,
+  });
 
-  const toggleReminder = (id: string, name: string) => {
-    setReminders((prev) => {
-      const next = !prev[id];
-      if (next) {
-        toast.success(`Overpass reminder set for ${name}`);
-      } else {
-        toast.info(`Reminder cancelled for ${name}`);
-      }
-      return { ...prev, [id]: next };
-    });
+  const [satelliteBlend, setSatelliteBlend] = useState<number>(0);
+  const [measuringMode, setMeasuringMode] = useState<boolean>(false);
+
+  const toggleLayer = (key: keyof typeof layers) => {
+    setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleCenterFleet = () => {
+    if ((window as any).centerOnFleet) {
+      (window as any).centerOnFleet();
+      toast.success('Radar centered on monitored fleet.');
+    }
   };
 
   return (
     <div className="h-full flex flex-col space-y-3 relative">
-      {/* Top Map Controls Bar */}
+      {/* Top Map Header Strip */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div>
-          <h1 className="text-xl font-bold font-display tracking-wide text-white">
-            Global Tactical Grid
+          <h1 className="text-xl font-bold font-display tracking-wide text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />
+            TACTICAL SITUATIONAL RADAR
           </h1>
-          <p className="text-xs text-muted-foreground font-mono">
-            REAL-TIME AIS STREAM, SATELLITE SAR COVERAGE, &amp; PIRACY HEATMAP
+          <p className="text-xs text-[#64748B] font-mono">
+            MULTI-LAYER SATELLITE AIS STREAM &middot; GCS MARITIME GRID
           </p>
         </div>
 
-        {/* Filter and Layer Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Layer Filter Buttons */}
-          <div className="flex bg-slate-900/90 border border-slate-800 rounded-lg p-1 font-mono text-xs">
-            {['all', 'incidents', 'vessels', 'dark', 'live'].map((tab) => (
-              <button
-                key={tab}
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
-                  activeTab === tab
-                    ? tab === 'dark'
-                      ? 'bg-amber-500 text-black font-bold'
-                      : tab === 'live'
-                      ? 'bg-emerald-500 text-black font-bold'
-                      : 'bg-cyan-500 text-black font-bold'
-                    : tab === 'dark'
-                    ? 'text-amber-400 hover:text-amber-300'
-                    : tab === 'live'
-                    ? 'text-emerald-400 hover:text-emerald-300'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {tab === 'dark' && <AlertCircle className="w-3 h-3" />}
-                {tab === 'live' && <span className="w-2 h-2 rounded-full bg-current animate-pulse" />}
-                {tab.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* Heatmap Layer Toggle */}
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setShowHeatmap(!showHeatmap)}
-            className={`h-8 font-mono text-xs gap-1.5 border-slate-700 transition-all ${
-              showHeatmap
-                ? 'bg-red-950 text-red-400 border-red-800'
-                : 'bg-slate-900/80 text-slate-300 hover:bg-slate-800'
-            }`}
+            onClick={handleCenterFleet}
+            className="h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] bg-[#111827] hover:bg-[#1A2332] text-[#00E5FF]"
           >
-            <Flame className={`w-3.5 h-3.5 ${showHeatmap ? 'text-red-400 fill-red-400' : 'text-slate-400'}`} />
-            <span>HEATMAP</span>
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>CENTER FLEET</span>
           </Button>
 
-          {/* Satellite Passes Panel Toggle */}
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setShowSatelliteSchedule(!showSatelliteSchedule)}
-            className={`h-8 font-mono text-xs gap-1.5 border-slate-700 transition-all ${
-              showSatelliteSchedule
-                ? 'bg-cyan-950 text-cyan-400 border-cyan-800'
-                : 'bg-slate-900/80 text-slate-300 hover:bg-slate-800'
+            onClick={() => {
+              setMeasuringMode(!measuringMode);
+              toast.info(measuringMode ? 'Measurement tool disabled.' : 'Click two points on the map to measure nautical miles.');
+            }}
+            className={`h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] transition-all ${
+              measuringMode
+                ? 'bg-[#00E5FF] text-black font-bold'
+                : 'bg-[#111827] hover:bg-[#1A2332] text-slate-300'
             }`}
           >
-            <Satellite className="w-3.5 h-3.5 text-cyan-400" />
-            <span>SAT PASSES</span>
-            {showSatelliteSchedule ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <Ruler className="w-3.5 h-3.5" />
+            <span>{measuringMode ? 'RULER ACTIVE' : 'MEASURE NM'}</span>
           </Button>
         </div>
       </div>
 
-      {/* Main Tactical Map Card */}
-      <Card className="flex-1 overflow-hidden border-border relative rounded-xl" style={{ minHeight: 540 }}>
+      {/* Main Tactical Map Viewport with Vignette Overlay */}
+      <Card className="flex-1 overflow-hidden border-[rgba(0,229,255,0.1)] relative rounded-xl shadow-2xl" style={{ minHeight: 560 }}>
+        {/* Leaflet Map */}
         <LeafletMapClient
           incidents={incidents}
           vessels={vessels}
           liveVessels={liveVessels}
           riskZones={riskZones}
-          activeTab={activeTab}
-          showHeatmap={showHeatmap}
-          activeSatellitePasses={showSatelliteSchedule ? mockSatellitePasses : []}
+          activeLayers={layers}
+          satelliteBlend={satelliteBlend}
+          measuringMode={measuringMode}
+          activeSatellitePasses={mockSatellitePasses}
           onSelectVessel={onSelectVessel}
           onSelectIncident={onSelectIncident}
         />
 
-        {/* Collapsible Upcoming Satellite Passes Floating Overlay */}
-        {showSatelliteSchedule && (
-          <div className="absolute bottom-4 left-4 z-[1000] w-80 bg-[#0c1322]/95 border border-cyan-500/40 backdrop-blur-md p-3.5 rounded-xl shadow-2xl font-mono text-xs space-y-2.5 animate-in slide-in-from-bottom-4 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
-                <Satellite className="w-3.5 h-3.5 animate-pulse" /> UPCOMING SAR OVERFLIGHTS
-              </div>
-              <span className="text-[9px] text-slate-500">REAL-TIME ORBIT</span>
-            </div>
+        {/* 3.1 Vignette Overlay (Darker Edges) */}
+        <div
+          className="pointer-events-none absolute inset-0 z-[400] shadow-[inset_0_0_80px_rgba(10,14,23,0.9)]"
+        />
 
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-              {mockSatellitePasses.map((pass) => (
-                <div
-                  key={pass.id}
-                  className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg space-y-1 hover:border-cyan-500/40 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white text-[11px]">{pass.satelliteName}</span>
-                    <span className="text-cyan-400 text-[10px] flex items-center gap-0.5">
-                      <Clock className="w-2.5 h-2.5" /> in {pass.countdownMinutes}m
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400">Coverage: {pass.coverageArea}</div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                      {pass.sensorType}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleReminder(pass.id, pass.satelliteName)}
-                      className={`text-[9px] flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors ${
-                        reminders[pass.id]
-                          ? 'bg-cyan-500 text-black font-bold'
-                          : 'text-slate-400 hover:text-white bg-slate-800'
-                      }`}
-                    >
-                      <Bell className="w-2.5 h-2.5" />
-                      {reminders[pass.id] ? 'REMINDER ACTIVE' : 'SET REMINDER'}
-                    </button>
-                  </div>
-                </div>
-              ))}
+        {/* 3.1 Compass Rose North Arrow SVG (Top Left) */}
+        <div className="absolute top-4 left-4 z-[500] pointer-events-none bg-[#111827]/80 backdrop-blur-md border border-[rgba(0,229,255,0.15)] p-2 rounded-lg flex flex-col items-center">
+          <Compass className="w-6 h-6 text-[#00E5FF] animate-spin-slow" />
+          <span className="font-mono text-[9px] text-[#00E5FF] font-bold mt-0.5">N</span>
+        </div>
+
+        {/* 3.3 Floating Layer Toggles Control Panel (Top Right) */}
+        <div className="absolute top-4 right-4 z-[500] bg-[#111827]/90 backdrop-blur-xl border border-[rgba(0,229,255,0.15)] p-3 rounded-xl shadow-2xl font-mono text-xs space-y-2 text-slate-300 w-52">
+          <div className="text-[10px] font-bold text-[#00E5FF] border-b border-slate-800 pb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Layers className="w-3 h-3" /> RADAR LAYERS
+            </span>
+            <span className="text-slate-500 text-[9px]">v2.4</span>
+          </div>
+
+          <div className="space-y-1.5 pt-0.5">
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.vessels}
+                onChange={() => toggleLayer('vessels')}
+                className="accent-[#00E5FF]"
+              />
+              <span>Monitored Fleet</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.darkContacts}
+                onChange={() => toggleLayer('darkContacts')}
+                className="accent-[#FFB020]"
+              />
+              <span className="text-[#FFB020]">Dark Vessels</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.incidents}
+                onChange={() => toggleLayer('incidents')}
+                className="accent-[#FF3B5C]"
+              />
+              <span className="text-[#FF3B5C]">Active Incidents</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.riskZones}
+                onChange={() => toggleLayer('riskZones')}
+                className="accent-[#7C3AED]"
+              />
+              <span>Hazard Corridors</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.heatmap}
+                onChange={() => toggleLayer('heatmap')}
+                className="accent-[#FF3B5C]"
+              />
+              <span>Threat Heatmap</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer hover:text-white">
+              <input
+                type="checkbox"
+                checked={layers.satellite}
+                onChange={() => toggleLayer('satellite')}
+                className="accent-[#00E5FF]"
+              />
+              <span>SAR Satellite Passes</span>
+            </label>
+          </div>
+        </div>
+
+        {/* 3.8 Map Crossfader Slider (Bottom Center) */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[500] bg-[#111827]/90 backdrop-blur-xl border border-[rgba(0,229,255,0.15)] px-4 py-2 rounded-xl shadow-2xl font-mono text-xs flex items-center gap-3">
+          <span className={`text-[10px] font-bold ${satelliteBlend === 0 ? 'text-[#00E5FF]' : 'text-slate-500'}`}>
+            TACTICAL CHART
+          </span>
+          <div className="w-28">
+            <Slider
+              value={[satelliteBlend]}
+              onValueChange={(val) => setSatelliteBlend(val[0])}
+              min={0}
+              max={100}
+              step={5}
+              className="cursor-pointer"
+            />
+          </div>
+          <span className={`text-[10px] font-bold ${satelliteBlend === 100 ? 'text-[#00E5FF]' : 'text-slate-500'}`}>
+            SATELLITE
+          </span>
+        </div>
+
+        {/* 3.5 Heatmap Density Legend (Bottom Left) */}
+        {layers.heatmap && (
+          <div className="absolute bottom-4 left-4 z-[500] bg-[#111827]/90 backdrop-blur-md border border-slate-800 p-2.5 rounded-lg font-mono text-[9px] space-y-1">
+            <span className="text-white font-bold block">HEATMAP DENSITY</span>
+            <div className="w-28 h-2 rounded-xs bg-gradient-to-r from-transparent via-[#00E676] via-[#FFB020] to-[#FF3B5C]" />
+            <div className="flex justify-between text-[#64748B]">
+              <span>LOW</span>
+              <span>CRITICAL</span>
             </div>
           </div>
         )}
-
-        {/* Tactical Legend Overlay */}
-        <div className="absolute top-3 right-3 z-[1000] bg-[#060b14]/90 border border-slate-800 backdrop-blur-md p-3 rounded-lg font-mono text-[10px] text-slate-400 space-y-1.5 shadow-2xl pointer-events-none">
-          <div className="text-cyan-400 font-bold mb-1 flex items-center gap-1">
-            <Layers className="w-3 h-3" /> RADAR MATRIX
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-emerald-400 transform rotate-45 shadow-[0_0_6px_#10b981]" />
-            <span className="text-slate-200">LIVE AIS STREAM</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-cyan-400 transform rotate-45 shadow-[0_0_6px_#00e5ff]" />
-            <span className="text-slate-200">MONITORED FLEET</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-amber-400 transform rotate-45 shadow-[0_0_6px_#f59e0b]" />
-            <span className="text-amber-400 font-bold">DARK VESSEL (NO AIS)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]" />
-            <span className="text-red-400 font-bold">CRITICAL INCIDENT</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 border border-dashed border-red-500 bg-red-500/20 rounded-full" />
-            <span className="text-slate-300">PIRACY HAZARD ZONE</span>
-          </div>
-        </div>
       </Card>
     </div>
   );

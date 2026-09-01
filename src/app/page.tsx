@@ -11,6 +11,8 @@ import AnalyticsPage from '@/components/analytics/AnalyticsPage';
 import AlertRulesPage from '@/components/rules/AlertRulesPage';
 import VesselDetailDrawer from '@/components/vessels/VesselDetailDrawer';
 import IncidentDetailModal from '@/components/incidents/IncidentDetailModal';
+import ReportIncidentModal from '@/components/incidents/ReportIncidentModal';
+import CommandPalette from '@/components/command/CommandPalette';
 import {
   useDashboardStats,
   useIncidents,
@@ -37,6 +39,8 @@ import { toast } from 'sonner';
 
 export default function Home() {
   const [activePage, setActivePage] = useState<PageId>('dashboard');
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   const { data: stats } = useDashboardStats();
   const { data: incidents, refetch: refetchIncidents } = useIncidents();
@@ -56,6 +60,35 @@ export default function Home() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [satDetectionsCount, setSatDetectionsCount] = useState<number>(1204);
 
+  // Global Keyboard Shortcuts (Cmd+K / Ctrl+K, Cmd+1-5, Escape)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K / Ctrl+K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandOpen((prev) => !prev);
+      }
+      // Cmd+1-5 Switch Pages
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === '1') { e.preventDefault(); setActivePage('dashboard'); }
+        if (e.key === '2') { e.preventDefault(); setActivePage('map'); }
+        if (e.key === '3') { e.preventDefault(); setActivePage('incidents'); }
+        if (e.key === '4') { e.preventDefault(); setActivePage('vessels'); }
+        if (e.key === '5') { e.preventDefault(); setActivePage('alerts'); }
+      }
+      // Escape
+      if (e.key === 'Escape') {
+        setSelectedVessel(null);
+        setSelectedIncident(null);
+        setIsCommandOpen(false);
+        setIsReportOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Sync initial alerts
   useEffect(() => {
     if (alerts && alerts.length > 0) {
@@ -63,14 +96,14 @@ export default function Home() {
     }
   }, [alerts]);
 
-  // Real-time Simulation Engine: Periodic coordinate drifts, sat detections increment, & occasional tactical incidents
+  // 8.8 Simulated Real-Time Engine (Coordinate jitter, emergency incident toasts, sat counter)
   useEffect(() => {
     // 1. Sat detections counter increment
     const satInterval = setInterval(() => {
       setSatDetectionsCount((prev) => prev + Math.floor(Math.random() * 3) + 1);
-    }, 12000);
+    }, 10000);
 
-    // 2. Occasional simulated emergency alert spawning
+    // 2. Periodic tactical emergency alerts
     const alertSpawnInterval = setInterval(() => {
       const sampleAlertTitles = [
         'FAST SKIFF INTERCEPT DETECTED — GULF OF ADEN',
@@ -93,16 +126,15 @@ export default function Home() {
 
       setActiveAlerts((prev) => [spawnedAlert, ...prev]);
 
-      // Trigger bottom-right toast
       toast.error(spawnedAlert.title, {
         description: spawnedAlert.message,
-        duration: 6000,
+        duration: 8000,
         action: {
-          label: 'OPEN ALERTS',
+          label: 'VIEW ALERT',
           onClick: () => setActivePage('alerts'),
         },
       });
-    }, 45000);
+    }, 60000);
 
     return () => {
       clearInterval(satInterval);
@@ -135,30 +167,6 @@ export default function Home() {
     { month: '2026-04', count: 23 },
   ];
 
-  const handleGlobalSearch = (query: string) => {
-    const q = query.toLowerCase();
-    const foundVessel = currentVessels.find(
-      (v) => v.name.toLowerCase().includes(q) || v.mmsi.includes(q)
-    );
-    if (foundVessel) {
-      setSelectedVessel(foundVessel);
-      toast.success(`Vessel identified: ${foundVessel.name}`);
-      return;
-    }
-
-    const foundIncident = currentIncidents.find(
-      (i) => (i.vesselName && i.vesselName.toLowerCase().includes(q)) || i.description.toLowerCase().includes(q)
-    );
-    if (foundIncident) {
-      setSelectedIncident(foundIncident);
-      toast.success(`Incident found: #${foundIncident.id}`);
-      return;
-    }
-
-    toast.info(`Search for "${query}": navigated to Incident Log`);
-    setActivePage('incidents');
-  };
-
   const handleMarkAlertRead = (id: number) => {
     setActiveAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isRead: true } : a)));
     markAlertReadMutation.mutate(id);
@@ -177,7 +185,7 @@ export default function Home() {
       activePage={activePage}
       onNavigate={setActivePage}
       unreadAlertsCount={unreadCount}
-      onGlobalSearch={handleGlobalSearch}
+      onOpenCommandPalette={() => setIsCommandOpen(true)}
     >
       {/* 1. Dashboard View */}
       {activePage === 'dashboard' && (
@@ -189,6 +197,7 @@ export default function Home() {
           activeIncidents={currentIncidents}
           loading={false}
           onNavigateAlerts={() => setActivePage('alerts')}
+          onNavigateMap={() => setActivePage('map')}
           onSelectIncident={(inc) => setSelectedIncident(inc)}
           onSelectVesselMmsi={(mmsi) => {
             const v = currentVessels.find((ves) => ves.mmsi === mmsi);
@@ -222,6 +231,7 @@ export default function Home() {
             const v = currentVessels.find((ves) => ves.mmsi === mmsi);
             if (v) setSelectedVessel(v);
           }}
+          onNavigateMap={() => setActivePage('map')}
         />
       )}
 
@@ -235,6 +245,7 @@ export default function Home() {
             const inc = currentIncidents.find((i) => i.id === id);
             if (inc) setSelectedIncident(inc);
           }}
+          onNavigateMap={() => setActivePage('map')}
         />
       )}
 
@@ -266,7 +277,19 @@ export default function Home() {
         <AlertRulesPage />
       )}
 
-      {/* Global Vessel Detail Slide-Over */}
+      {/* Spotlight Command Palette (Cmd+K) */}
+      <CommandPalette
+        isOpen={isCommandOpen}
+        onClose={() => setIsCommandOpen(false)}
+        onNavigate={setActivePage}
+        vessels={currentVessels}
+        incidents={currentIncidents}
+        onSelectVessel={(v) => setSelectedVessel(v)}
+        onSelectIncident={(i) => setSelectedIncident(i)}
+        onOpenReportIncident={() => setIsReportOpen(true)}
+      />
+
+      {/* 480px Vessel Detail Slide-Over */}
       <VesselDetailDrawer
         vessel={selectedVessel}
         isOpen={Boolean(selectedVessel)}
@@ -276,6 +299,10 @@ export default function Home() {
           setSelectedVessel(null);
           const inc = currentIncidents.find((i) => i.id === id);
           if (inc) setSelectedIncident(inc);
+        }}
+        onOpenAlertRule={() => {
+          setSelectedVessel(null);
+          setActivePage('rules');
         }}
       />
 
@@ -288,6 +315,21 @@ export default function Home() {
           setSelectedIncident(null);
           const v = currentVessels.find((ves) => ves.name === name);
           if (v) setSelectedVessel(v);
+        }}
+        onTrackOnMap={() => {
+          setSelectedIncident(null);
+          setActivePage('map');
+        }}
+      />
+
+      {/* Global Report Incident Modal */}
+      <ReportIncidentModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        vessels={currentVessels}
+        onSubmitIncident={(payload) => {
+          createIncidentMutation.mutate(payload);
+          refetchIncidents();
         }}
       />
     </AppLayout>

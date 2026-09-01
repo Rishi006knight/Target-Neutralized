@@ -13,9 +13,16 @@ import {
   FastForward,
   ExternalLink,
   MapPin,
+  Star,
+  Bell,
+  Gauge,
+  Compass,
+  FileText,
+  Ship,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCoordinate, getRiskColor } from '@/lib/utils-maritime';
+import { toast } from 'sonner';
 import type { Vessel, Alert } from '@/lib/mock-data';
 
 interface VesselDetailDrawerProps {
@@ -24,6 +31,7 @@ interface VesselDetailDrawerProps {
   onClose: () => void;
   alerts?: Alert[];
   onSelectIncident?: (id: number) => void;
+  onOpenAlertRule?: () => void;
 }
 
 export default function VesselDetailDrawer({
@@ -32,10 +40,40 @@ export default function VesselDetailDrawer({
   onClose,
   alerts = [],
   onSelectIncident,
+  onOpenAlertRule,
 }: VesselDetailDrawerProps) {
   const [isPlayingRoute, setIsPlayingRoute] = useState(false);
   const [playbackIndex, setPlaybackIndex] = useState(0);
-  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4>(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 4 | 8>(1);
+  const [isWatchlisted, setIsWatchlisted] = useState(false);
+  const [notes, setNotes] = useState('');
+
+  // Load / Save Notes to localStorage
+  useEffect(() => {
+    if (vessel) {
+      const savedNotes = localStorage.getItem(`vessel_notes_${vessel.mmsi}`) || '';
+      setNotes(savedNotes);
+      const savedWatch = localStorage.getItem(`vessel_watchlist_${vessel.mmsi}`) === 'true';
+      setIsWatchlisted(savedWatch);
+      setPlaybackIndex(0);
+      setIsPlayingRoute(false);
+    }
+  }, [vessel]);
+
+  const handleSaveNotes = (text: string) => {
+    setNotes(text);
+    if (vessel) {
+      localStorage.setItem(`vessel_notes_${vessel.mmsi}`, text);
+    }
+  };
+
+  const toggleWatchlist = () => {
+    if (!vessel) return;
+    const next = !isWatchlisted;
+    setIsWatchlisted(next);
+    localStorage.setItem(`vessel_watchlist_${vessel.mmsi}`, String(next));
+    toast.success(next ? `Added ${vessel.name} to Watchlist.` : `Removed ${vessel.name} from Watchlist.`);
+  };
 
   const route = vessel?.routeHistory || [
     { lat: (vessel?.lat || 0) - 0.5, lng: (vessel?.lng || 0) - 0.8, speed: 17.5, heading: 85.0, timestamp: '10:00 UTC' },
@@ -70,257 +108,239 @@ export default function VesselDetailDrawer({
     (a) => a.relatedVesselMmsi === vessel.mmsi || (vessel.name && a.message.includes(vessel.name))
   );
 
+  const speedPercent = Math.min(100, Math.max(0, (vessel.speed / 30) * 100));
+  const riskScorePercent = Math.round(vessel.riskScore * 100);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xs" onClick={onClose} />
 
-      {/* 400px Slide-Over Panel */}
+      {/* 5.2 480px Slide-Over Panel */}
       <aside
-        className="relative w-full max-w-[420px] bg-[#0c1322] border-l border-slate-700/80 shadow-2xl h-full flex flex-col z-10 overflow-hidden text-slate-200 animate-in slide-in-from-right duration-200"
+        className="relative w-full max-w-[480px] bg-[#111827] border-l border-[rgba(0,229,255,0.2)] shadow-2xl h-full flex flex-col z-10 overflow-hidden text-slate-200 animate-in slide-in-from-right duration-200"
         role="dialog"
         aria-label={`Vessel Details for ${vessel.name}`}
       >
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/60 shrink-0">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-[#0A0E17]/80 shrink-0">
           <div className="flex items-center gap-2.5">
-            <Radio className="w-5 h-5 text-cyan-400 animate-pulse" />
+            <Radio className="w-5 h-5 text-[#00E5FF] animate-pulse" />
             <div>
-              <h2 className="font-display font-bold text-lg tracking-wider text-white truncate max-w-[280px]">
+              <h2 className="font-display font-bold text-base tracking-wider text-white truncate max-w-[240px]">
                 {vessel.name}
               </h2>
-              <span className="font-mono text-xs text-slate-400">MMSI: {vessel.mmsi}</span>
+              <span className="font-mono text-xs text-[#64748B]">MMSI: {vessel.mmsi}</span>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg h-8 w-8"
-          >
-            <X className="w-4 h-4" />
-          </Button>
+
+          <div className="flex items-center gap-1.5">
+            {/* Watchlist Star Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleWatchlist}
+              className={`h-8 w-8 rounded-lg cursor-pointer ${
+                isWatchlisted ? 'text-amber-400' : 'text-slate-500 hover:text-white'
+              }`}
+              title="Add to Watchlist"
+            >
+              <Star className={`w-4 h-4 ${isWatchlisted ? 'fill-amber-400' : ''}`} />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg h-8 w-8 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono text-xs">
           {/* Status Badge Strip */}
-          <div className="flex items-center justify-between gap-2 p-2.5 bg-slate-900/90 border border-slate-800 rounded-lg">
+          <div className="flex items-center justify-between gap-2 p-2.5 bg-[#0A0E17] border border-slate-800 rounded-lg">
             <div className="flex items-center gap-2">
               <span
                 className={`w-2.5 h-2.5 rounded-full ${
-                  vessel.isDark ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                  vessel.isDark ? 'bg-[#FF3B5C] animate-pulse' : 'bg-[#00E676]'
                 }`}
               />
-              <span className={vessel.isDark ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
-                {vessel.isDark ? 'AIS OFFLINE (DARK)' : 'TRANSPONDER ACTIVE'}
+              <span className="font-bold text-white uppercase text-xs">
+                {vessel.isDark ? 'DARK CONTACT (NO AIS)' : 'AIS BROADCASTING'}
               </span>
             </div>
-            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 uppercase">
-              {vessel.type || 'Commercial Transit'}
+            <span className="text-[10px] text-[#64748B]">
+              LAST CONTACT: {new Date(vessel.lastSeenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} UTC
             </span>
           </div>
 
-          {/* Telemetry Matrix */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg">
-              <span className="text-[10px] text-slate-400 block mb-1">LATITUDE / LONGITUDE</span>
-              <span className="text-white font-bold text-[11px]">
-                {formatCoordinate(currentRoutePoint.lat, true)}
-                <br />
-                {formatCoordinate(currentRoutePoint.lng, false)}
-              </span>
+          {/* 5.2 Two-Column Info Grid */}
+          <div className="p-3 bg-[#1A2332] border border-slate-800 rounded-lg grid grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <span className="text-[#64748B] block text-[9px]">TYPE / CATEGORY</span>
+              <span className="text-white font-bold">{vessel.type || 'Container Vessel'}</span>
             </div>
-            <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg">
-              <span className="text-[10px] text-slate-400 block mb-1">SPEED / HEADING</span>
-              <div className="flex items-center gap-1.5 text-white font-bold text-[11px]">
-                <Navigation
-                  className="w-3.5 h-3.5 text-cyan-400"
-                  style={{ transform: `rotate(${currentRoutePoint.heading}deg)` }}
-                />
-                <span>{currentRoutePoint.heading.toFixed(1)}&deg;</span>
-                <span className="text-slate-400">|</span>
-                <span className="text-cyan-400">{currentRoutePoint.speed.toFixed(1)} kts</span>
-              </div>
+            <div>
+              <span className="text-[#64748B] block text-[9px]">FLAG OF REGISTRY</span>
+              <span className="text-white font-bold">{vessel.flag || 'Marshall Islands'}</span>
+            </div>
+            <div>
+              <span className="text-[#64748B] block text-[9px]">CALL SIGN</span>
+              <span className="text-[#00E5FF] font-bold">V7AA9</span>
+            </div>
+            <div>
+              <span className="text-[#64748B] block text-[9px]">GROSS TONNAGE</span>
+              <span className="text-white font-bold">94,300 GT</span>
             </div>
           </div>
 
-          {/* Threat Risk Meter with Sparkline History */}
-          <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-cyan-400" /> ML THREAT SCORE
-              </span>
-              <span
-                className={`font-bold px-2 py-0.5 rounded text-[11px] ${
-                  vessel.riskScore > 0.7
-                    ? 'bg-red-950 text-red-400 border border-red-800'
-                    : vessel.riskScore > 0.4
-                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                    : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                }`}
-              >
-                {(vessel.riskScore * 100).toFixed(0)}% CRITICALITY
-              </span>
-            </div>
-
-            {/* Score Bar */}
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${getRiskColor(vessel.riskScore)}`}
-                style={{ width: `${vessel.riskScore * 100}%` }}
-              />
-            </div>
-
-            {/* Mini Sparkline Chart */}
-            <div className="pt-2">
-              <span className="text-[10px] text-slate-500 block mb-1">SCORE TIMELINE (PAST 24H)</span>
-              <div className="flex items-end gap-1.5 h-8 bg-slate-950/60 p-1.5 rounded border border-slate-800/80">
-                {(vessel.scoreHistory || [0.2, 0.25, 0.3, 0.35, vessel.riskScore]).map((score, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-cyan-500/80 rounded-t hover:bg-cyan-400 transition-all"
-                    style={{ height: `${Math.max(15, score * 100)}%` }}
-                    title={`Score: ${(score * 100).toFixed(0)}%`}
-                  />
-                ))}
+          {/* Semicircular Speed & Heading Gauges */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Speed Gauge */}
+            <div className="p-3 bg-[#0A0E17] border border-slate-800 rounded-lg text-center space-y-1">
+              <div className="flex items-center justify-center gap-1 text-[#64748B] text-[10px]">
+                <Gauge className="w-3.5 h-3.5 text-[#00E5FF]" /> SPEED
               </div>
+              <div className="text-xl font-display font-bold text-[#00E5FF]">
+                {currentRoutePoint.speed.toFixed(1)} <span className="text-xs font-mono text-slate-400">KTS</span>
+              </div>
+              {/* Mini Gauge Bar */}
+              <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
+                <div className="h-full bg-[#00E5FF] rounded-full" style={{ width: `${speedPercent}%` }} />
+              </div>
+            </div>
+
+            {/* Heading Compass */}
+            <div className="p-3 bg-[#0A0E17] border border-slate-800 rounded-lg text-center space-y-1">
+              <div className="flex items-center justify-center gap-1 text-[#64748B] text-[10px]">
+                <Compass className="w-3.5 h-3.5 text-[#00E5FF]" /> HEADING
+              </div>
+              <div className="text-xl font-display font-bold text-[#00E5FF]">
+                {currentRoutePoint.heading.toFixed(1)}&deg;
+              </div>
+              <div className="text-[9px] text-[#64748B]">COURSE OVER GROUND</div>
             </div>
           </div>
 
-          {/* Embedded Tactical Position Preview with 50nm Standoff Buffer */}
-          <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg space-y-2">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-cyan-400" /> TACTICAL POSITION &amp; 50NM BUFFER
-              </span>
-              <span className="text-slate-500">FLAG: {vessel.flag || 'INTERNATIONAL'}</span>
+          {/* Risk Score Circular Progress & Sparkline */}
+          <div className="p-3 bg-[#1A2332] border border-slate-800 rounded-lg flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {/* 100px Circular Ring */}
+              <div className="relative w-16 h-16 rounded-full flex items-center justify-center bg-[#0A0E17] border-2 border-[#FF3B5C]/60 shadow-[0_0_12px_rgba(255,59,92,0.3)]">
+                <span className="font-display font-bold text-lg text-white">{riskScorePercent}%</span>
+              </div>
+              <div>
+                <span className="font-heading font-bold text-sm text-white block">COMPOSITE THREAT</span>
+                <span className="text-[10px] text-[#64748B]">ML EVALUATION (30D)</span>
+              </div>
             </div>
 
-            {/* SVG Tactical Radar Display */}
-            <div className="relative w-full h-36 bg-[#060b14] rounded border border-slate-800 overflow-hidden flex items-center justify-center">
-              {/* Radar Rings */}
-              <div className="absolute w-28 h-28 rounded-full border border-cyan-500/20" />
-              <div className="absolute w-20 h-20 rounded-full border border-cyan-500/30" />
-              <div className="absolute w-12 h-12 rounded-full border border-cyan-500/40" />
-              <div className="absolute w-full h-[1px] bg-cyan-500/15" />
-              <div className="absolute h-full w-[1px] bg-cyan-500/15" />
-
-              {/* 50nm Standoff Ring */}
-              <div className="absolute w-24 h-24 rounded-full border-2 border-dashed border-amber-500/40 bg-amber-500/5 animate-pulse" />
-
-              {/* Vessel Blip */}
-              <div className="relative z-10 flex flex-col items-center">
+            {/* Sparkline */}
+            <div className="flex items-end gap-1 h-8">
+              {(vessel.scoreHistory || [0.2, 0.4, 0.6, 0.7, vessel.riskScore]).map((score, idx) => (
                 <div
-                  className="w-3 h-3 bg-cyan-400 transform rotate-45 border border-black shadow-[0_0_8px_#00e5ff]"
-                  style={{ transform: `rotate(${currentRoutePoint.heading}deg)` }}
+                  key={idx}
+                  className={`w-1.5 rounded-xs ${getRiskColor(score)}`}
+                  style={{ height: `${Math.max(15, score * 100)}%` }}
+                  title={`Score: ${(score * 100).toFixed(0)}%`}
                 />
-                <span className="text-[9px] text-cyan-300 font-bold mt-1 bg-black/80 px-1 rounded">
-                  {vessel.name}
-                </span>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Historical Route Playback Controls */}
-          <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-lg space-y-2.5">
+          {/* 5.3 Route Playback Section */}
+          <div className="p-3 bg-[#0A0E17] border border-slate-800 rounded-lg space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                <FastForward className="w-3.5 h-3.5 text-cyan-400" /> ROUTE HISTORY PLAYBACK
+              <span className="text-[#00E5FF] font-bold text-[11px] flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-[#00E5FF]" /> HISTORICAL ROUTE PLAYBACK
               </span>
-              <span className="text-cyan-400 text-[11px] font-bold">
-                {currentRoutePoint.timestamp}
-              </span>
+              <span className="text-[9px] text-[#64748B]">{currentRoutePoint.timestamp}</span>
             </div>
 
             {/* Scrubber Bar */}
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min={0}
-                max={route.length - 1}
-                value={playbackIndex}
-                onChange={(e) => setPlaybackIndex(parseInt(e.target.value))}
-                className="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
-            </div>
+            <input
+              type="range"
+              min={0}
+              max={route.length - 1}
+              value={playbackIndex}
+              onChange={(e) => {
+                setPlaybackIndex(Number(e.target.value));
+                setIsPlayingRoute(false);
+              }}
+              className="w-full h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-[#00E5FF]"
+            />
 
-            {/* Controls Bar */}
+            {/* Controls Strip */}
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-1.5">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setIsPlayingRoute(!isPlayingRoute)}
-                  className="h-7 text-xs border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-mono gap-1"
+                  className="h-7 px-2.5 bg-[#00E5FF] text-black font-bold text-xs hover:bg-[#00E5FF]/80"
                 >
-                  {isPlayingRoute ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  {isPlayingRoute ? 'PAUSE' : 'PLAY'}
+                  {isPlayingRoute ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                  <span className="ml-1">{isPlayingRoute ? 'PAUSE' : 'PLAY'}</span>
                 </Button>
+
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    setIsPlayingRoute(false);
-                    setPlaybackIndex(0);
-                  }}
-                  className="h-7 text-xs text-slate-400 hover:text-white"
-                  title="Reset track"
+                  onClick={() => setPlaybackIndex(0)}
+                  className="h-7 w-7 p-0 text-slate-400 hover:text-white"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </Button>
               </div>
 
-              {/* Speed Switcher */}
-              <div className="flex bg-slate-950 p-0.5 rounded border border-slate-800">
-                {[1, 2, 4].map((speed) => (
+              {/* Speed Buttons */}
+              <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-[10px]">
+                {[1, 2, 4, 8].map((s) => (
                   <button
-                    key={speed}
-                    onClick={() => setPlaybackSpeed(speed as 1 | 2 | 4)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono ${
-                      playbackSpeed === speed
-                        ? 'bg-cyan-500 text-black font-bold'
-                        : 'text-slate-400 hover:text-slate-200'
+                    key={s}
+                    type="button"
+                    onClick={() => setPlaybackSpeed(s as any)}
+                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                      playbackSpeed === s ? 'bg-[#00E5FF] text-black font-bold' : 'text-slate-400'
                     }`}
                   >
-                    {speed}x
+                    {s}x
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Linked Threat Alerts */}
-          <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg space-y-2">
-            <span className="text-slate-300 font-bold flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> LINKED THREAT ALERTS (
-              {linkedAlerts.length})
-            </span>
-            {linkedAlerts.length === 0 ? (
-              <p className="text-slate-500 text-[11px] py-1">No active threat alerts linked to this MMSI.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {linkedAlerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className="p-2 bg-slate-950/80 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-amber-400 font-bold">
-                      <span>{alert.title}</span>
-                      {alert.relatedIncidentId && onSelectIncident && (
-                        <button
-                          onClick={() => onSelectIncident(alert.relatedIncidentId!)}
-                          className="text-cyan-400 hover:underline flex items-center gap-0.5"
-                        >
-                          INCIDENT #{alert.relatedIncidentId} <ExternalLink className="w-2.5 h-2.5" />
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-slate-400 text-[10px] line-clamp-2 mt-0.5">{alert.message}</p>
+          {/* Linked Incidents */}
+          {linkedAlerts.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-[#FF3B5C] font-bold text-[10px] block">LINKED THREAT ALERTS</span>
+              {linkedAlerts.slice(0, 2).map((alt) => (
+                <div key={alt.id} className="p-2 bg-[#1A2332] border border-slate-800 rounded text-[11px] space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white">{alt.title}</span>
+                    <span className="text-[9px] text-[#FF3B5C] uppercase">{alt.severity}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                  <p className="text-slate-400 text-[10px] line-clamp-1">{alt.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Operator Notes (Saved to LocalStorage) */}
+          <div className="space-y-1">
+            <span className="text-[#64748B] font-bold text-[10px] block">OPERATOR SURVEILLANCE NOTES</span>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => handleSaveNotes(e.target.value)}
+              placeholder="Type tactical log notes for this vessel (auto-saved)..."
+              className="w-full bg-[#0A0E17] border border-slate-800 rounded-lg p-2 text-xs font-mono text-white placeholder:text-slate-600 focus:border-[#00E5FF]"
+            />
           </div>
         </div>
       </aside>

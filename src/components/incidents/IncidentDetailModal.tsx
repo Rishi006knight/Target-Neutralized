@@ -1,21 +1,39 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Shield, MapPin, Clock, Radio, Activity } from 'lucide-react';
+import {
+  Shield,
+  MapPin,
+  Clock,
+  Radio,
+  Activity,
+  Ship,
+  FileText,
+  AlertTriangle,
+  Plus,
+  Send,
+  Download,
+  Share2,
+  CheckCircle2,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { formatCoordinate, getSeverityColor } from '@/lib/utils-maritime';
-import type { Incident } from '@/lib/mock-data';
+import { toast } from 'sonner';
+import type { Incident, IncidentEvent } from '@/lib/mock-data';
 
 interface IncidentDetailModalProps {
   incident: Incident | null;
   isOpen: boolean;
   onClose: () => void;
   onSelectVessel?: (vesselName: string) => void;
+  onTrackOnMap?: (incident: Incident) => void;
 }
 
 export default function IncidentDetailModal({
@@ -23,130 +41,201 @@ export default function IncidentDetailModal({
   isOpen,
   onClose,
   onSelectVessel,
+  onTrackOnMap,
 }: IncidentDetailModalProps) {
+  const [timelineEvents, setTimelineEvents] = useState<IncidentEvent[]>([]);
+  const [newEntryText, setNewEntryText] = useState('');
+  const [currentStatus, setCurrentStatus] = useState<string>('Responding');
+
+  React.useEffect(() => {
+    if (incident) {
+      setTimelineEvents(
+        incident.timeline || [
+          { time: '10:42 UTC', title: 'Radar Contact Detected', description: 'Fast approaching target identified.' },
+          { time: '10:55 UTC', title: 'Distress Signal Logged', description: 'Vessel master broadcast security alert.' },
+        ]
+      );
+      setCurrentStatus(incident.responseStatus || 'Responding');
+    }
+  }, [incident]);
+
   if (!incident) return null;
 
-  const statusColors = {
+  const handleAddTimelineEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEntryText.trim()) return;
+
+    const newEvent: IncidentEvent = {
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' UTC',
+      title: 'Operator Update',
+      description: newEntryText.trim(),
+    };
+
+    setTimelineEvents((prev) => [newEvent, ...prev]);
+    setNewEntryText('');
+    toast.success('Incident timeline event logged.');
+  };
+
+  const statusColors: Record<string, string> = {
     New: 'bg-red-950 text-red-400 border-red-800',
     Investigating: 'bg-amber-950 text-amber-400 border-amber-800',
     Responding: 'bg-cyan-950 text-cyan-400 border-cyan-800',
     Resolved: 'bg-emerald-950 text-emerald-400 border-emerald-800',
   };
 
-  const responseStatus = incident.responseStatus || 'Responding';
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[640px] bg-[#0c1322] border border-slate-700/80 text-slate-100 shadow-2xl p-6 rounded-xl font-mono">
+      <DialogContent className="sm:max-w-[640px] bg-[#111827] border border-[rgba(0,229,255,0.2)] text-[#F1F5F9] shadow-2xl p-6 rounded-xl font-mono text-xs max-h-[90vh] overflow-y-auto">
         <DialogHeader className="border-b border-slate-800 pb-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className={`px-2.5 py-0.5 rounded text-xs font-bold uppercase border ${getSeverityColor(incident.severity)}`}>
                 {incident.severity}
               </span>
-              <span className="text-slate-400 text-xs">INCIDENT #{incident.id}</span>
+              <span className="text-[#64748B] text-xs font-bold">INCIDENT #{incident.id}</span>
             </div>
-            <span
-              className={`px-2.5 py-0.5 rounded text-xs font-bold uppercase border ${
-                statusColors[responseStatus] || statusColors.Responding
-              }`}
+
+            {/* Status Selector */}
+            <select
+              value={currentStatus}
+              onChange={(e) => {
+                setCurrentStatus(e.target.value);
+                toast.success(`Incident status updated to ${e.target.value}`);
+              }}
+              className="bg-[#0A0E17] border border-slate-700 text-[#00E5FF] px-2.5 py-1 rounded text-xs font-bold cursor-pointer"
             >
-              STATUS: {responseStatus.toUpperCase()}
-            </span>
+              <option value="New">STATUS: NEW</option>
+              <option value="Investigating">STATUS: INVESTIGATING</option>
+              <option value="Responding">STATUS: RESPONDING</option>
+              <option value="Resolved">STATUS: RESOLVED</option>
+            </select>
           </div>
 
-          <DialogTitle className="font-display text-xl text-white mt-2 tracking-wide">
+          <DialogTitle className="font-heading font-bold text-xl text-white mt-2 tracking-wide">
             {incident.incidentType.replace(/_/g, ' ').toUpperCase()} &middot; {incident.vesselName || 'UNKNOWN ASSET'}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Modal Body */}
-        <div className="space-y-4 pt-3 text-xs">
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 bg-slate-900/60 rounded-lg border border-slate-800">
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">TARGET VESSEL</span>
-              {incident.vesselName ? (
-                <button
-                  type="button"
-                  onClick={() => onSelectVessel && onSelectVessel(incident.vesselName!)}
-                  className="text-cyan-400 hover:underline font-bold flex items-center gap-1 truncate max-w-full text-left"
-                >
-                  <Radio className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{incident.vesselName}</span>
-                </button>
-              ) : (
-                <span className="text-slate-400">UNKNOWN</span>
-              )}
+        <div className="space-y-4 pt-2">
+          {/* Linked Target Vessel Card */}
+          <div className="p-3 bg-[#1A2332] border border-slate-800 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Ship className="w-5 h-5 text-[#00E5FF]" />
+              <div>
+                <span className="font-display font-bold text-white block text-sm">
+                  {incident.vesselName || 'UNIDENTIFIED VESSEL'}
+                </span>
+                <span className="text-[#64748B] text-[10px]">
+                  {incident.vesselType || 'Commercial'} &middot; Flag: {incident.vesselFlag || 'International'}
+                </span>
+              </div>
             </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">GEOLOCATION</span>
-              <span className="text-white font-bold flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-cyan-400 shrink-0" />
+            {incident.vesselName && onSelectVessel && (
+              <button
+                type="button"
+                onClick={() => onSelectVessel(incident.vesselName!)}
+                className="px-2.5 py-1 rounded bg-[#00E5FF]/10 text-[#00E5FF] border border-[#00E5FF]/30 hover:bg-[#00E5FF] hover:text-black transition-colors"
+              >
+                OPEN VESSEL PROFILE &rarr;
+              </button>
+            )}
+          </div>
+
+          {/* Incident Telemetry & Geolocation Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            <div className="p-2 bg-[#0A0E17] border border-slate-800 rounded">
+              <span className="text-[#64748B] block text-[9px]">LATITUDE / LNG</span>
+              <span className="text-white font-bold">
                 {formatCoordinate(incident.lat, true)}, {formatCoordinate(incident.lng, false)}
               </span>
             </div>
-
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">INTELLIGENCE SOURCE</span>
-              <span className="text-slate-300 font-semibold truncate block">{incident.dataSource}</span>
-            </div>
-
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">OCCURRENCE TIME (UTC)</span>
-              <span className="text-white flex items-center gap-1">
-                <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                {new Date(incident.occurredAt).toUTCString()}
+            <div className="p-2 bg-[#0A0E17] border border-slate-800 rounded">
+              <span className="text-[#64748B] block text-[9px]">OCCURRED AT</span>
+              <span className="text-white font-bold">
+                {new Date(incident.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} UTC
               </span>
             </div>
-
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">VESSEL FLAG &amp; TYPE</span>
-              <span className="text-slate-300">
-                {incident.vesselType || 'Merchant Cargo'} &middot; {incident.vesselFlag || 'International'}
-              </span>
+            <div className="p-2 bg-[#0A0E17] border border-slate-800 rounded">
+              <span className="text-[#64748B] block text-[9px]">SOURCE REPORT</span>
+              <span className="text-[#00E5FF] font-bold truncate block">{incident.dataSource}</span>
             </div>
-
-            <div>
-              <span className="text-[10px] text-slate-400 block mb-0.5">RESPONSE UNIT</span>
-              <span className="text-cyan-400 font-bold flex items-center gap-1">
-                <Shield className="w-3 h-3" /> Naval Task Force
-              </span>
+            <div className="p-2 bg-[#0A0E17] border border-slate-800 rounded">
+              <span className="text-[#64748B] block text-[9px]">THREAT SEVERITY</span>
+              <span className="text-[#FF3B5C] font-bold uppercase">{incident.severity}</span>
             </div>
           </div>
 
-          {/* Full Situational Narrative */}
-          <div className="p-3.5 bg-slate-900/80 rounded-lg border border-slate-800 space-y-1.5">
-            <span className="text-slate-300 font-bold block text-xs flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-cyan-400" /> SITUATION REPORT NARRATIVE
-            </span>
-            <p className="text-slate-300 leading-relaxed font-sans text-xs">
-              {incident.description || 'No detailed situation report filed.'}
-            </p>
+          {/* Full Narrative */}
+          <div className="p-3 bg-[#0A0E17] border border-slate-800 rounded-lg space-y-1">
+            <span className="text-[#64748B] font-bold text-[10px] block">OPERATIONAL BRIEF / NARRATIVE</span>
+            <p className="text-slate-300 font-sans text-xs leading-relaxed">{incident.description}</p>
           </div>
 
-          {/* Chronological Incident Timeline */}
-          <div className="p-3.5 bg-slate-900/80 rounded-lg border border-slate-800 space-y-2.5">
-            <span className="text-slate-300 font-bold block text-xs flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-cyan-400" /> EVENT TIMELINE LOG
-            </span>
-
-            <div className="space-y-2 border-l border-slate-700 ml-2 pl-3">
-              {(incident.timeline || [
-                { time: 'T-00:45', title: 'Initial Radar Trigger', description: 'Fast suspicious surface craft closed to within visual range.' },
-                { time: 'T-00:20', title: 'Distress Beacon Activated', description: 'Master transmitted emergency distress call to Regional Maritime Centre.' },
-                { time: 'T-00:00', title: 'Intervention Dispatched', description: 'Coast guard air and surface patrol units deployed to intercept.' },
-              ]).map((event, idx) => (
-                <div key={idx} className="relative">
-                  <div className="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-cyan-400" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-cyan-400 font-bold text-[11px]">{event.time}</span>
-                    <span className="text-white font-semibold text-xs">{event.title}</span>
+          {/* 4.3 Vertical Incident Timeline with Add-Entry Form */}
+          <div className="space-y-2">
+            <span className="text-[#00E5FF] font-bold text-[11px] block">CHRONOLOGICAL INCIDENT TIMELINE</span>
+            <div className="p-3 bg-[#0A0E17] border border-slate-800 rounded-lg space-y-3 max-h-44 overflow-y-auto">
+              {timelineEvents.map((evt, idx) => (
+                <div key={idx} className="flex gap-3 items-start border-l border-slate-800 pl-3 relative">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] absolute -left-[4px] top-1" />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-[11px]">{evt.title}</span>
+                      <span className="text-[#64748B] text-[9px]">{evt.time}</span>
+                    </div>
+                    <p className="text-slate-400 font-sans text-[11px]">{evt.description}</p>
                   </div>
-                  <p className="text-slate-400 text-[11px] mt-0.5">{event.description}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Inline Timeline Input */}
+            <form onSubmit={handleAddTimelineEntry} className="flex gap-2">
+              <Input
+                placeholder="Add operator update to timeline..."
+                value={newEntryText}
+                onChange={(e) => setNewEntryText(e.target.value)}
+                className="bg-[#1A2332] border-slate-700 text-white font-mono text-xs h-8"
+              />
+              <Button type="submit" size="sm" className="bg-[#00E5FF] hover:bg-[#00E5FF]/80 text-black font-bold h-8">
+                <Send className="w-3.5 h-3.5" />
+              </Button>
+            </form>
+          </div>
+
+          {/* Modal Action Buttons */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (onTrackOnMap) onTrackOnMap(incident);
+                onClose();
+              }}
+              className="border-[#00E5FF]/30 text-[#00E5FF] hover:bg-[#00E5FF] hover:text-black font-mono text-xs gap-1.5"
+            >
+              <MapPin className="w-3.5 h-3.5" /> TRACK ON MAP
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  toast.success('Incident situational report generated.');
+                }}
+                className="border-slate-700 text-slate-300 hover:text-white font-mono text-xs gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" /> EXPORT REPORT
+              </Button>
+              <Button
+                size="sm"
+                onClick={onClose}
+                className="bg-[#00E5FF] hover:bg-[#00E5FF]/80 text-black font-bold font-mono text-xs"
+              >
+                CLOSE
+              </Button>
             </div>
           </div>
         </div>
