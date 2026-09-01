@@ -75,6 +75,16 @@ export interface RiskZone {
   lngMax?: number;
 }
 
+export interface HotspotDef {
+  name: string;
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+  baseRisk: number;
+  zoneType: string;
+}
+
 export interface Alert {
   id: number;
   severity: 'critical' | 'high' | 'warning' | 'info';
@@ -157,6 +167,54 @@ export interface AlertRule {
 // -------------------------------------------------------------
 // Seed Data
 // -------------------------------------------------------------
+
+export const staticHotspots: HotspotDef[] = [
+  {
+    name: 'Gulf of Aden (IRTC Corridor)',
+    latMin: 11.0,
+    latMax: 15.0,
+    lngMin: 43.0,
+    lngMax: 52.0,
+    baseRisk: 0.92,
+    zoneType: 'Piracy Corridor',
+  },
+  {
+    name: 'Gulf of Guinea (Niger Delta Offshore)',
+    latMin: 0.0,
+    latMax: 7.0,
+    lngMin: 0.0,
+    lngMax: 10.0,
+    baseRisk: 0.88,
+    zoneType: 'Armed Kidnapping Zone',
+  },
+  {
+    name: 'Strait of Malacca & Singapore',
+    latMin: 1.0,
+    latMax: 7.0,
+    lngMin: 98.0,
+    lngMax: 105.0,
+    baseRisk: 0.62,
+    zoneType: 'Armed Robbery Corridor',
+  },
+  {
+    name: 'Somali Basin & East Coast',
+    latMin: -5.0,
+    latMax: 10.0,
+    lngMin: 45.0,
+    lngMax: 56.0,
+    baseRisk: 0.84,
+    zoneType: 'Mother-Ship Range',
+  },
+  {
+    name: 'Southern Red Sea & Bab-el-Mandeb',
+    latMin: 12.0,
+    latMax: 16.0,
+    lngMin: 41.0,
+    lngMax: 44.5,
+    baseRisk: 0.95,
+    zoneType: 'Direct Kinetic Attack Zone',
+  },
+];
 
 export const mockStats: DashboardStats = {
   vesselsWatched: 48,
