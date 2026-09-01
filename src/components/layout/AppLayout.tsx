@@ -63,19 +63,6 @@ export function AppLayout({
             );
           })}
         </nav>
-
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground mb-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            SYS.OP.NOMINAL
-          </div>
-          <div className="text-[10px] text-muted-foreground/70 uppercase tracking-widest font-mono">
-            Supabase + Railway + Netlify
-          </div>
-          <div className="text-[10px] text-muted-foreground/50 uppercase tracking-widest font-mono mt-1">
-            Enc: AES-256
-          </div>
-        </div>
       </aside>
 
       {/* Mobile header */}
@@ -92,7 +79,9 @@ export function AppLayout({
           </svg>
         </button>
         <Target className="w-5 h-5 text-primary" />
-        <span className="font-bold tracking-wider text-sm">OCEANSHIELD <span className="text-primary font-mono text-xs">OPS</span></span>
+        <span className="font-bold tracking-wider text-sm">
+          OCEANSHIELD <span className="text-primary font-mono text-xs">OPS</span>
+        </span>
         <div className="ml-auto font-mono text-[10px] text-muted-foreground">{time.slice(17, 25)}</div>
       </div>
 
@@ -112,7 +101,10 @@ export function AppLayout({
                 return (
                   <button
                     key={item.id}
-                    onClick={() => { onNavigate(item.id); setMobileMenuOpen(false); }}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      setMobileMenuOpen(false);
+                    }}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors w-full text-left ${
                       isActive ? 'bg-primary/10 text-primary border border-primary/20' : 'text-sidebar-foreground hover:bg-sidebar-accent'
                     }`}
