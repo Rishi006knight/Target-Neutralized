@@ -1,65 +1,72 @@
 # OceanShield OPS — Deployment & Architecture Guide
 
-This guide walks you through running and deploying the **OceanShield OPS Maritime Anomaly Detector** platform (Java Spring Boot 3 Backend + Next.js Frontend).
+This guide walks you through deploying the **OceanShield OPS Maritime Anomaly Detector** platform on **Vercel** (Frontend / Fullstack) and Cloud backends (Render / Railway / Java Spring Boot).
 
 ---
 
 ## 🏛️ Architecture Overview
 
-- **Backend**: Java 17 + Spring Boot 3 (`backend-java/`) running on port `8080` with REST APIs, real-time threat evaluation, and anomaly scoring.
-- **Frontend**: Next.js 16 + React 19 + TypeScript + Leaflet + Tailwind CSS running on port `3000`.
-- **Database (Optional)**: Supabase PostgreSQL (via transaction pooler) or zero-config in-memory persistence.
+- **Frontend (Vercel)**: Next.js 16 + React 19 + TypeScript + Leaflet + Tailwind CSS + App Router with resilient API fallbacks.
+- **Backend (Optional / Standalone)**: Java 17 + Spring Boot 3 (`backend-java/`) running on port `8080`.
+- **Database (Optional)**: Supabase PostgreSQL (via transaction pooler) or zero-config resilient in-memory mode.
 
 ---
 
-## 🚀 Running the Java Spring Boot Backend
+## 🚀 Deploying to Vercel (Step-by-Step)
 
-### Prerequisites:
-- Java JDK 17+ installed
-- Maven (`mvn`)
+### Option 1: Via Vercel Web Dashboard (Recommended)
 
-### Start Java Backend:
+1. Go to [vercel.com](https://vercel.com/) and log in with your GitHub account.
+2. Click **Add New...** > **Project**.
+3. Import your repository: `Rishi006knight/Target-Neutralized`.
+4. Configure Project Settings:
+   - **Framework Preset**: `Next.js` (automatically detected)
+   - **Root Directory**: `./`
+   - **Build Command**: `npm run build` (or `prisma generate && next build`)
+   - **Output Directory**: `.next` (default)
+   - **Install Command**: `npm install`
+5. *(Optional)* Under **Environment Variables**, add:
+   - `NEXT_PUBLIC_AISSTREAM_API_KEY`: *(Your AISStream.io API key for live global satellite telemetry, or leave empty for auto-simulation mode)*
+   - `DATABASE_URL`: *(Your Supabase connection string, if connecting PostgreSQL)*
+6. Click **Deploy**. Vercel will build and assign a production URL (e.g., `https://target-neutralized.vercel.app`).
+
+---
+
+### Option 2: Via Vercel CLI
+
 ```bash
-cd backend-java
-mvn spring-boot:run
+# Install Vercel CLI globally
+npm install -g vercel
+
+# Deploy directly from the project directory
+cd d:\projects\neutralise
+vercel --prod
 ```
-The Java backend will start on **`http://localhost:8080`**.
-
-### Verified Endpoints:
-- `GET /api/stats` — High-level situation report and active incident metrics
-- `GET /api/vessels` — Monitored fleet telemetry (with `?isDark=true` support)
-- `POST /api/vessels/telemetry` — Real-time telemetry ingest with automated anomaly evaluation
-- `GET /api/incidents` — Global incident reports
-- `POST /api/incidents` — Report new incident
-- `GET /api/incidents/summary` — Incident breakdown by severity & type
-- `GET /api/incidents/trend` — 6-month incident trend timeline
-- `GET /api/alerts` — System threat notifications
-- `PATCH /api/alerts/{id}/read` — Acknowledge alert
-- `GET /api/risk-zones` — Global piracy & security corridors
-- `GET /api/detections` — Satellite SAR/optical passes
 
 ---
 
-## 🖥️ Running the Next.js Frontend
+## 🖥️ Running Locally
 
+### 1. Next.js Frontend:
 ```bash
+cd d:\projects\neutralise
 npm install
 npm run dev
 ```
-Open **`http://localhost:3000`** in your browser.
+Open **`http://localhost:3000`**.
+
+### 2. Java Spring Boot Backend (Optional):
+```bash
+cd d:\projects\neutralise\backend-java
+mvn spring-boot:run
+```
+Backend runs on **`http://localhost:8080`**.
 
 ---
 
-## ☁️ Deployment Guide (Render / Railway / Cloud)
+## ☁️ Java Spring Boot Backend Deployment (Render / Railway)
 
-### Option A: Java Spring Boot Backend on Render / Railway
 1. **Root Directory**: `backend-java`
 2. **Build Command**: `mvn clean package -DskipTests`
 3. **Start Command**: `java -jar target/ocean-shield-ops-1.0.0.jar`
 4. **Port**: `8080`
-
-### Option B: Next.js Frontend on Netlify / Vercel
-1. Connect repository `Target-Neutralized`
-2. Set Build Command: `npm run build`
-3. Set Publish Directory: `.next`
-4. Configure `NEXT_PUBLIC_AISSTREAM_API_KEY` (optional for live AISStream WebSocket feed).
