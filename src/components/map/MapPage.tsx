@@ -87,7 +87,7 @@ export default function MapPage({
   };
 
   return (
-    <div className="h-full flex flex-col space-y-3 relative">
+    <div className="h-[calc(100vh-140px)] min-h-[640px] flex flex-col space-y-3 relative">
       {/* Top Map Header Strip */}
       <div className="flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div>
@@ -106,7 +106,7 @@ export default function MapPage({
             size="sm"
             variant="outline"
             onClick={handleCenterFleet}
-            className="h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] bg-[#111827] hover:bg-[#1A2332] text-[#00E5FF]"
+            className="h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] bg-[#111827] hover:bg-[#1A2332] text-[#00E5FF] cursor-pointer"
           >
             <Maximize2 className="w-3.5 h-3.5" />
             <span>CENTER FLEET</span>
@@ -119,7 +119,7 @@ export default function MapPage({
               setMeasuringMode(!measuringMode);
               toast.info(measuringMode ? 'Measurement tool disabled.' : 'Click two points on the map to measure nautical miles.');
             }}
-            className={`h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] transition-all ${
+            className={`h-8 font-mono text-xs gap-1.5 border-[rgba(0,229,255,0.2)] transition-all cursor-pointer ${
               measuringMode
                 ? 'bg-[#00E5FF] text-black font-bold'
                 : 'bg-[#111827] hover:bg-[#1A2332] text-slate-300'
@@ -132,7 +132,7 @@ export default function MapPage({
       </div>
 
       {/* Main Tactical Map Viewport with Vignette Overlay */}
-      <Card className="flex-1 overflow-hidden border-[rgba(0,229,255,0.1)] relative rounded-xl shadow-2xl" style={{ minHeight: 560 }}>
+      <Card className="flex-1 h-full min-h-[580px] overflow-hidden border-[rgba(0,229,255,0.1)] relative rounded-xl shadow-2xl">
         {/* Leaflet Map */}
         <LeafletMapClient
           incidents={incidents}

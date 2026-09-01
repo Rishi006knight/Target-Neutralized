@@ -31,6 +31,15 @@ interface LeafletMapClientProps {
 // Custom Center Controller
 function MapCenterController({ vessels }: { vessels: Vessel[] }) {
   const map = useMap();
+
+  useEffect(() => {
+    map.invalidateSize();
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [map]);
+
   useEffect(() => {
     (window as any).centerOnFleet = () => {
       if (vessels && vessels.length > 0) {
@@ -156,7 +165,7 @@ export default function LeafletMapClient({
     <MapContainer
       center={[8, 48]}
       zoom={3}
-      style={{ height: '100%', width: '100%', background: '#0A0E17' }}
+      style={{ height: '100%', minHeight: '620px', width: '100%', background: '#0A0E17' }}
       zoomControl={false}
       minZoom={2}
       maxZoom={12}
