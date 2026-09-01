@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Search, Plus, Filter, FileText, ChevronRight } from 'lucide-react';
 import { getSeverityColor, formatCoordinate } from '@/lib/utils-maritime';
@@ -21,14 +20,33 @@ interface IncidentsPageProps {
   onCreateIncident?: (data: Partial<Incident>) => void;
 }
 
-export default function IncidentsPage({ incidents, loading, onRefresh, onCreateIncident }: IncidentsPageProps) {
+function safeFormatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Recent';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Recent';
+    return d.toISOString().replace('T', ' ').substring(0, 16);
+  } catch {
+    return 'Recent';
+  }
+}
+
+export default function IncidentsPage({ incidents = [], loading, onRefresh, onCreateIncident }: IncidentsPageProps) {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [search, setSearch] = useState<string>('');
   const [isReportOpen, setIsReportOpen] = useState(false);
 
-  const filtered = incidents.filter(inc => {
+  const filtered = (incidents || []).filter((inc) => {
     if (severityFilter !== 'all' && inc.severity !== severityFilter) return false;
     if (typeFilter !== 'all' && inc.incidentType !== typeFilter) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchVessel = inc.vesselName?.toLowerCase().includes(q) || false;
+      const matchDesc = inc.description?.toLowerCase().includes(q) || false;
+      const matchType = inc.incidentType?.toLowerCase().includes(q) || false;
+      return matchVessel || matchDesc || matchType;
+    }
     return true;
   });
 
@@ -56,7 +74,9 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
         onRefresh();
         setIsReportOpen(false);
       }
-    } catch { /* error handled silently */ }
+    } catch {
+      /* error handled silently */
+    }
   };
 
   return (
@@ -85,7 +105,12 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
         <div className="p-4 border-b border-border flex items-center gap-4 bg-muted/10 shrink-0 flex-wrap">
           <div className="relative flex-1 max-w-sm min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search vessel or location..." className="pl-9 font-mono text-sm bg-background border-border" />
+            <Input
+              placeholder="Search vessel, type, or description..."
+              className="pl-9 font-mono text-sm bg-background border-border"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
           <Select value={severityFilter} onValueChange={setSeverityFilter}>
@@ -114,10 +139,6 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
               <SelectItem value="ais_gap">AIS GAP</SelectItem>
             </SelectContent>
           </Select>
-
-          <Button variant="outline" size="icon" className="shrink-0">
-            <Filter className="w-4 h-4" />
-          </Button>
         </div>
 
         <div className="flex-1 overflow-auto">
@@ -137,12 +158,24 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
               {loading ? (
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i} className="border-border">
-                    <TableCell><Skeleton className="h-6 w-20 bg-muted/20" /></TableCell>
-                    <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-28 bg-muted/20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24 bg-muted/20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-36 bg-muted/20" /></TableCell>
-                    <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-28 bg-muted/20" /></TableCell>
-                    <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-16 bg-muted/20" /></TableCell>
+                    <TableCell>
+                      <Skeleton className="h-6 w-20 bg-muted/20" />
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Skeleton className="h-4 w-28 bg-muted/20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24 bg-muted/20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-36 bg-muted/20" />
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-28 bg-muted/20" />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-4 w-16 bg-muted/20" />
+                    </TableCell>
                     <TableCell></TableCell>
                   </TableRow>
                 ))
@@ -153,22 +186,30 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map(incident => (
+                filtered.map((incident) => (
                   <TableRow key={incident.id} className="border-border hover:bg-muted/10 cursor-pointer group">
                     <TableCell>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase border ${getSeverityColor(incident.severity)}`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase border ${getSeverityColor(
+                          incident.severity
+                        )}`}
+                      >
                         {incident.severity}
                       </span>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground hidden sm:table-cell">
-                      {new Date(incident.occurredAt).toISOString().replace('T', ' ').substring(0, 16)}
+                      {safeFormatDate(incident.occurredAt)}
                     </TableCell>
                     <TableCell className="font-mono text-xs font-medium">
                       {incident.incidentType.replace(/_/g, ' ').toUpperCase()}
                     </TableCell>
                     <TableCell>
                       <div className="font-medium text-sm">{incident.vesselName || 'UNKNOWN'}</div>
-                      {incident.vesselType && <div className="text-[10px] text-muted-foreground font-mono mt-0.5 uppercase">{incident.vesselType}</div>}
+                      {incident.vesselType && (
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5 uppercase">
+                          {incident.vesselType}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground hidden lg:table-cell">
                       {formatCoordinate(incident.lat, true)}, {formatCoordinate(incident.lng, false)}
@@ -193,28 +234,36 @@ export default function IncidentsPage({ incidents, loading, onRefresh, onCreateI
   );
 }
 
-function ReportIncidentForm({ onSubmit, onCancel }: { onSubmit: (data: Record<string, string>) => void; onCancel: () => void }) {
+function ReportIncidentForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (data: Record<string, string>) => void;
+  onCancel: () => void;
+}) {
   const [form, setForm] = useState({
     incidentType: 'suspicious',
     severity: 'medium',
-    lat: '0',
-    lng: '0',
+    lat: '12.5',
+    lng: '45.0',
     vesselName: '',
     vesselType: '',
     description: '',
     occurredAt: new Date().toISOString().slice(0, 16),
-    dataSource: 'manual',
+    dataSource: 'Manual Operator Ingest',
   });
 
-  const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">INCIDENT TYPE</label>
-          <Select value={form.incidentType} onValueChange={v => update('incidentType', v)}>
-            <SelectTrigger className="font-mono text-sm"><SelectValue /></SelectTrigger>
+          <Select value={form.incidentType} onValueChange={(v) => update('incidentType', v)}>
+            <SelectTrigger className="font-mono text-sm">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="hijack">HIJACK</SelectItem>
               <SelectItem value="boarding">BOARDING</SelectItem>
@@ -226,8 +275,10 @@ function ReportIncidentForm({ onSubmit, onCancel }: { onSubmit: (data: Record<st
         </div>
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">SEVERITY</label>
-          <Select value={form.severity} onValueChange={v => update('severity', v)}>
-            <SelectTrigger className="font-mono text-sm"><SelectValue /></SelectTrigger>
+          <Select value={form.severity} onValueChange={(v) => update('severity', v)}>
+            <SelectTrigger className="font-mono text-sm">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="critical">CRITICAL</SelectItem>
               <SelectItem value="high">HIGH</SelectItem>
@@ -240,30 +291,65 @@ function ReportIncidentForm({ onSubmit, onCancel }: { onSubmit: (data: Record<st
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">LATITUDE</label>
-          <Input type="number" step="0.000001" value={form.lat} onChange={e => update('lat', e.target.value)} className="font-mono" />
+          <Input
+            type="number"
+            step="0.000001"
+            value={form.lat}
+            onChange={(e) => update('lat', e.target.value)}
+            className="font-mono"
+          />
         </div>
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">LONGITUDE</label>
-          <Input type="number" step="0.000001" value={form.lng} onChange={e => update('lng', e.target.value)} className="font-mono" />
+          <Input
+            type="number"
+            step="0.000001"
+            value={form.lng}
+            onChange={(e) => update('lng', e.target.value)}
+            className="font-mono"
+          />
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">VESSEL NAME</label>
-          <Input value={form.vesselName} onChange={e => update('vesselName', e.target.value)} className="font-mono" />
+          <Input
+            value={form.vesselName}
+            onChange={(e) => update('vesselName', e.target.value)}
+            placeholder="e.g. PACIFIC MARINER"
+            className="font-mono"
+          />
         </div>
         <div>
           <label className="font-mono text-xs text-muted-foreground mb-1.5 block">TIME OF INCIDENT (UTC)</label>
-          <Input type="datetime-local" value={form.occurredAt} onChange={e => update('occurredAt', e.target.value)} className="font-mono" />
+          <Input
+            type="datetime-local"
+            value={form.occurredAt}
+            onChange={(e) => update('occurredAt', e.target.value)}
+            className="font-mono"
+          />
         </div>
       </div>
       <div>
         <label className="font-mono text-xs text-muted-foreground mb-1.5 block">DESCRIPTION</label>
-        <Textarea value={form.description} onChange={e => update('description', e.target.value)} className="font-mono text-sm resize-none h-24" />
+        <Textarea
+          value={form.description}
+          onChange={(e) => update('description', e.target.value)}
+          placeholder="Detailed situational report..."
+          className="font-mono text-sm resize-none h-24"
+        />
       </div>
       <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} className="font-mono">CANCEL</Button>
-        <Button onClick={() => onSubmit(form)} className="font-mono" disabled={!form.description || form.description.length < 5}>SUBMIT REPORT</Button>
+        <Button type="button" variant="outline" onClick={onCancel} className="font-mono">
+          CANCEL
+        </Button>
+        <Button
+          onClick={() => onSubmit(form)}
+          className="font-mono"
+          disabled={!form.description || form.description.length < 3}
+        >
+          SUBMIT REPORT
+        </Button>
       </div>
     </div>
   );

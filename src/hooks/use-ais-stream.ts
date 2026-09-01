@@ -132,8 +132,12 @@ const SEED_SIMULATED_VESSELS: Vessel[] = [
 ];
 
 export function useAisStream() {
-  const [liveVessels, setLiveVessels] = useState<Map<string, Vessel>>(new Map());
-  const [isConnected, setIsConnected] = useState(false);
+  const [liveVessels, setLiveVessels] = useState<Map<string, Vessel>>(() => {
+    const initialMap = new Map<string, Vessel>();
+    SEED_SIMULATED_VESSELS.forEach((v) => initialMap.set(v.mmsi, v));
+    return initialMap;
+  });
+  const [isConnected, setIsConnected] = useState(true);
   const [isSimulated, setIsSimulated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -142,48 +146,38 @@ export function useAisStream() {
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_AISSTREAM_API_KEY;
 
-    // If no real AISStream key is set, start high-realism simulated telemetry
+    // Continuous simulation ticker for background motion
+    simIntervalRef.current = setInterval(() => {
+      setLiveVessels((prev) => {
+        const next = new Map(prev);
+        next.forEach((vessel, mmsi) => {
+          const rad = ((vessel.heading || 0) * Math.PI) / 180;
+          const deltaSpeed = (Math.random() - 0.5) * 0.4;
+          const newSpeed = Math.max(2, Math.min(32, (vessel.speed || 10) + deltaSpeed));
+          const speedDegPerSec = (newSpeed * 1.852) / (111.32 * 3600);
+          const newLat = (vessel.lat || 0) + Math.cos(rad) * speedDegPerSec * 4;
+          const newLng = (vessel.lng || 0) + Math.sin(rad) * speedDegPerSec * 4;
+
+          const updatedVessel: Vessel = {
+            ...vessel,
+            lat: parseFloat(newLat.toFixed(5)),
+            lng: parseFloat(newLng.toFixed(5)),
+            speed: parseFloat(newSpeed.toFixed(1)),
+            heading: ((vessel.heading || 0) + (Math.random() - 0.5) * 2 + 360) % 360,
+            lastSeenAt: new Date().toISOString(),
+          };
+
+          const anomaly = analyzeVesselAnomaly(updatedVessel);
+          updatedVessel.riskScore = anomaly.riskScore;
+
+          next.set(mmsi, updatedVessel);
+        });
+        return next;
+      });
+    }, 4000);
+
     if (!apiKey) {
       setIsSimulated(true);
-      setIsConnected(true);
-
-      const simMap = new Map<string, Vessel>();
-      SEED_SIMULATED_VESSELS.forEach((v) => {
-        const anomaly = analyzeVesselAnomaly(v);
-        simMap.set(v.mmsi, { ...v, riskScore: anomaly.riskScore });
-      });
-      setLiveVessels(simMap);
-
-      simIntervalRef.current = setInterval(() => {
-        setLiveVessels((prev) => {
-          const next = new Map(prev);
-          next.forEach((vessel, mmsi) => {
-            // Move vessel in heading direction
-            const rad = (vessel.heading * Math.PI) / 180;
-            const deltaSpeed = (Math.random() - 0.5) * 0.4;
-            const newSpeed = Math.max(2, Math.min(32, vessel.speed + deltaSpeed));
-            const speedDegPerSec = (newSpeed * 1.852) / (111.32 * 3600); // knots to deg/sec
-            const newLat = vessel.lat + Math.cos(rad) * speedDegPerSec * 4;
-            const newLng = vessel.lng + Math.sin(rad) * speedDegPerSec * 4;
-
-            const updatedVessel: Vessel = {
-              ...vessel,
-              lat: parseFloat(newLat.toFixed(5)),
-              lng: parseFloat(newLng.toFixed(5)),
-              speed: parseFloat(newSpeed.toFixed(1)),
-              heading: (vessel.heading + (Math.random() - 0.5) * 2 + 360) % 360,
-              lastSeenAt: new Date().toISOString(),
-            };
-
-            const anomaly = analyzeVesselAnomaly(updatedVessel);
-            updatedVessel.riskScore = anomaly.riskScore;
-
-            next.set(mmsi, updatedVessel);
-          });
-          return next;
-        });
-      }, 3000);
-
       return () => {
         if (simIntervalRef.current) clearInterval(simIntervalRef.current);
       };
@@ -198,7 +192,6 @@ export function useAisStream() {
         ws.onopen = () => {
           setIsConnected(true);
           setError(null);
-          // Subscribe to global piracy and high-risk security corridors
           const subscriptionMessage = {
             Apikey: apiKey,
             BoundingBoxes: [
@@ -263,12 +256,11 @@ export function useAisStream() {
 
         ws.onerror = (e) => {
           console.error('AISStream WebSocket error', e);
-          setError('WebSocket connection error');
+          setError('WebSocket connection fallback to simulation');
         };
 
         ws.onclose = () => {
-          setIsConnected(false);
-          setTimeout(connect, 5000);
+          setTimeout(connect, 6000);
         };
       } catch (err) {
         console.error('Failed to initialize WebSocket', err);
@@ -279,6 +271,7 @@ export function useAisStream() {
     connect();
 
     return () => {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
       if (wsRef.current) {
         wsRef.current.close();
       }

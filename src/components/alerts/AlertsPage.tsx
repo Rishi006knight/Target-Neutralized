@@ -14,25 +14,44 @@ interface AlertsPageProps {
   onMarkRead: (id: number) => void;
 }
 
-export default function AlertsPage({ alerts, loading, onMarkRead }: AlertsPageProps) {
+function safeRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Just now';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Recently';
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return 'Recently';
+  }
+}
+
+export default function AlertsPage({ alerts = [], loading, onMarkRead }: AlertsPageProps) {
   const getAlertIcon = (severity: string) => {
     switch (severity) {
-      case 'critical': return <ShieldAlert className="w-5 h-5 text-destructive" />;
-      case 'high': return <AlertTriangle className="w-5 h-5 text-orange-500" />;
-      case 'warning': return <AlertTriangle className="w-5 h-5 text-amber-500" />;
+      case 'critical':
+        return <ShieldAlert className="w-5 h-5 text-destructive" />;
+      case 'high':
+        return <AlertTriangle className="w-5 h-5 text-orange-500" />;
+      case 'warning':
+        return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       case 'info':
-      default: return <Info className="w-5 h-5 text-primary" />;
+      default:
+        return <Info className="w-5 h-5 text-primary" />;
     }
   };
 
   const getAlertBorder = (severity: string, isRead: boolean) => {
     if (isRead) return 'border-border/50 bg-muted/5 opacity-60';
     switch (severity) {
-      case 'critical': return 'border-destructive/50 bg-destructive/10';
-      case 'high': return 'border-orange-500/50 bg-orange-500/10';
-      case 'warning': return 'border-amber-500/50 bg-amber-500/10';
+      case 'critical':
+        return 'border-destructive/50 bg-destructive/10';
+      case 'high':
+        return 'border-orange-500/50 bg-orange-500/10';
+      case 'warning':
+        return 'border-amber-500/50 bg-amber-500/10';
       case 'info':
-      default: return 'border-primary/30 bg-primary/5';
+      default:
+        return 'border-primary/30 bg-primary/5';
     }
   };
 
@@ -41,7 +60,7 @@ export default function AlertsPage({ alerts, loading, onMarkRead }: AlertsPagePr
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Bell className="w-6 h-6" /> System Alerts
+            <Bell className="w-6 h-6 text-primary" /> System Alerts
           </h1>
           <p className="text-sm text-muted-foreground font-mono mt-1">AUTOMATED THREAT &amp; SYSTEM NOTIFICATIONS</p>
         </div>
@@ -66,7 +85,7 @@ export default function AlertsPage({ alerts, loading, onMarkRead }: AlertsPagePr
             NO ACTIVE ALERTS
           </div>
         ) : (
-          alerts.map(alert => (
+          alerts.map((alert) => (
             <Card key={alert.id} className={`transition-colors ${getAlertBorder(alert.severity, alert.isRead)}`}>
               <CardContent className="p-4">
                 <div className="flex gap-4 items-start">
@@ -75,7 +94,7 @@ export default function AlertsPage({ alerts, loading, onMarkRead }: AlertsPagePr
                     <div className="flex items-center justify-between gap-4 mb-1">
                       <h3 className="font-bold text-sm truncate">{alert.title}</h3>
                       <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(alert.createdAt), { addSuffix: true })}
+                        {safeRelativeTime(alert.createdAt)}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{alert.message}</p>
