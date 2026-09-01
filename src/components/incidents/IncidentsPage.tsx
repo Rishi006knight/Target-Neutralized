@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, Plus, Filter, FileText, ChevronRight } from 'lucide-react';
+import { Search, Plus, FileText, ChevronRight } from 'lucide-react';
 import { getSeverityColor, formatCoordinate } from '@/lib/utils-maritime';
 import type { Incident } from '@/lib/mock-data';
 
@@ -88,13 +88,15 @@ export default function IncidentsPage({ incidents = [], loading, onRefresh, onCr
         </div>
         <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
           <DialogTrigger asChild>
-            <Button className="font-mono text-xs tracking-wider gap-2">
+            <Button className="font-mono text-xs tracking-wider gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
               <Plus className="w-4 h-4" /> REPORT INCIDENT
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] bg-card border-border">
+          <DialogContent className="sm:max-w-[620px] bg-[#0c1322] border border-slate-700/80 text-slate-100 shadow-2xl p-6 rounded-xl">
             <DialogHeader>
-              <DialogTitle className="font-mono tracking-wider">NEW INCIDENT REPORT</DialogTitle>
+              <DialogTitle className="font-mono tracking-wider text-cyan-400 text-lg flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" /> NEW INCIDENT REPORT
+              </DialogTitle>
             </DialogHeader>
             <ReportIncidentForm onSubmit={handleReportSubmit} onCancel={() => setIsReportOpen(false)} />
           </DialogContent>
@@ -256,15 +258,15 @@ function ReportIncidentForm({
   const update = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-2">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">INCIDENT TYPE</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">INCIDENT TYPE</label>
           <Select value={form.incidentType} onValueChange={(v) => update('incidentType', v)}>
-            <SelectTrigger className="font-mono text-sm">
+            <SelectTrigger className="font-mono text-sm bg-[#131d31] border-slate-700 text-white">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-[#131d31] border-slate-700 text-white">
               <SelectItem value="hijack">HIJACK</SelectItem>
               <SelectItem value="boarding">BOARDING</SelectItem>
               <SelectItem value="approach">APPROACH</SelectItem>
@@ -274,12 +276,12 @@ function ReportIncidentForm({
           </Select>
         </div>
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">SEVERITY</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">SEVERITY</label>
           <Select value={form.severity} onValueChange={(v) => update('severity', v)}>
-            <SelectTrigger className="font-mono text-sm">
+            <SelectTrigger className="font-mono text-sm bg-[#131d31] border-slate-700 text-white">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-[#131d31] border-slate-700 text-white">
               <SelectItem value="critical">CRITICAL</SelectItem>
               <SelectItem value="high">HIGH</SelectItem>
               <SelectItem value="medium">MEDIUM</SelectItem>
@@ -290,62 +292,67 @@ function ReportIncidentForm({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">LATITUDE</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">LATITUDE</label>
           <Input
             type="number"
             step="0.000001"
             value={form.lat}
             onChange={(e) => update('lat', e.target.value)}
-            className="font-mono"
+            className="font-mono bg-[#131d31] border-slate-700 text-white"
           />
         </div>
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">LONGITUDE</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">LONGITUDE</label>
           <Input
             type="number"
             step="0.000001"
             value={form.lng}
             onChange={(e) => update('lng', e.target.value)}
-            className="font-mono"
+            className="font-mono bg-[#131d31] border-slate-700 text-white"
           />
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">VESSEL NAME</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">VESSEL NAME</label>
           <Input
             value={form.vesselName}
             onChange={(e) => update('vesselName', e.target.value)}
             placeholder="e.g. PACIFIC MARINER"
-            className="font-mono"
+            className="font-mono bg-[#131d31] border-slate-700 text-white placeholder:text-slate-500"
           />
         </div>
         <div>
-          <label className="font-mono text-xs text-muted-foreground mb-1.5 block">TIME OF INCIDENT (UTC)</label>
+          <label className="font-mono text-xs text-slate-300 mb-1.5 block">TIME OF INCIDENT (UTC)</label>
           <Input
             type="datetime-local"
             value={form.occurredAt}
             onChange={(e) => update('occurredAt', e.target.value)}
-            className="font-mono"
+            className="font-mono bg-[#131d31] border-slate-700 text-white"
           />
         </div>
       </div>
       <div>
-        <label className="font-mono text-xs text-muted-foreground mb-1.5 block">DESCRIPTION</label>
+        <label className="font-mono text-xs text-slate-300 mb-1.5 block">DESCRIPTION</label>
         <Textarea
           value={form.description}
           onChange={(e) => update('description', e.target.value)}
           placeholder="Detailed situational report..."
-          className="font-mono text-sm resize-none h-24"
+          className="font-mono text-sm resize-none h-24 bg-[#131d31] border-slate-700 text-white placeholder:text-slate-500"
         />
       </div>
-      <div className="flex justify-end gap-2 pt-4">
-        <Button type="button" variant="outline" onClick={onCancel} className="font-mono">
+      <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          className="font-mono border-slate-700 text-slate-300 hover:bg-slate-800"
+        >
           CANCEL
         </Button>
         <Button
           onClick={() => onSubmit(form)}
-          className="font-mono"
+          className="font-mono bg-cyan-500 hover:bg-cyan-400 text-black font-semibold"
           disabled={!form.description || form.description.length < 3}
         >
           SUBMIT REPORT
