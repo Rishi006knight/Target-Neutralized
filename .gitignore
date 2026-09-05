@@ -35,6 +35,10 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# local agent wrappers
+powershell.bat
+powershell.cmd
+
 # vercel
 .vercel
 
