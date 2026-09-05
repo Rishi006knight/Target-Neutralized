@@ -93,7 +93,13 @@ export default function AbyssalThreatConsole() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCommandOpen, selectedIncident, playHudBeep]);
 
-  // Handle incident selection (opens dossier in RightDock & highlights)
+  // Derive selected vessel object
+  const selectedVessel = useMemo(
+    () => allVessels.find((v) => v.mmsi === selectedVesselMmsi) || null,
+    [allVessels, selectedVesselMmsi]
+  );
+
+  // Handle incident selection (opens incident dossier in RightDock)
   const handleSelectIncident = useCallback((incident: AbyssalIncident) => {
     setSelectedIncident(incident);
     setSelectedVesselMmsi(null);
@@ -106,16 +112,18 @@ export default function AbyssalThreatConsole() {
     playHudBeep(520, 'sine', 0.04);
   }, [playHudBeep]);
 
-  // Handle vessel highlighting
+  // Handle vessel selection (opens vessel inspection dossier in RightDock)
   const handleSelectVessel = useCallback((vessel: AbyssalVessel) => {
     setSelectedVesselMmsi(vessel.mmsi);
-    // If vessel is linked to an incident, open that incident's dossier
-    const linkedIncident = incidents.find((i) => i.linkedVessels.includes(vessel.mmsi));
-    if (linkedIncident) {
-      setSelectedIncident(linkedIncident);
-    }
+    setSelectedIncident(null);
+    setRightDockCollapsed(false);
     playHudBeep(800, 'sine', 0.05);
-  }, [incidents, playHudBeep]);
+  }, [playHudBeep]);
+
+  const handleDeselectVessel = useCallback(() => {
+    setSelectedVesselMmsi(null);
+    playHudBeep(520, 'sine', 0.04);
+  }, [playHudBeep]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#03080D] select-none text-[#C9D6DF]">
@@ -191,18 +199,23 @@ export default function AbyssalThreatConsole() {
         />
       </div>
 
-      {/* ── Right Dock: Feed ↔ Dossier Investigation Panel ── */}
+      {/* ── Right Dock: Feed ↔ Incident & Vessel Dossier Panel ── */}
       <RightDock
         incidents={incidents}
         vessels={allVessels}
         clusters={clusters}
         selectedIncident={selectedIncident}
+        selectedVessel={selectedVessel}
         collapsed={rightDockCollapsed}
         onToggleCollapse={() => setRightDockCollapsed((prev) => !prev)}
         onSelectIncident={handleSelectIncident}
         onDeselectIncident={handleDeselectIncident}
+        onSelectVessel={handleSelectVessel}
+        onDeselectVessel={handleDeselectVessel}
         onHighlightVessel={(mmsi) => {
           setSelectedVesselMmsi(mmsi);
+          setSelectedIncident(null);
+          setRightDockCollapsed(false);
           playHudBeep(850, 'sine', 0.05);
         }}
       />

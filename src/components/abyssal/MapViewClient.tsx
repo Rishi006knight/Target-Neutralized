@@ -376,11 +376,15 @@ export default function MapViewClient({
                     <span>{formatCoords(incident.lat, incident.lng)}</span>
                     <button
                       type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         onSelectIncident(incident);
                       }}
-                      className="px-2.5 py-1 rounded bg-[#22D3EE]/20 hover:bg-[#22D3EE]/30 active:scale-95 border border-[#22D3EE]/40 text-[#22D3EE] font-mono text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-md"
+                      className="px-2.5 py-1 rounded bg-[#22D3EE]/25 hover:bg-[#22D3EE]/40 active:scale-95 border border-[#22D3EE]/50 text-[#22D3EE] font-mono text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-md select-none"
                     >
                       OPEN DOSSIER →
                     </button>
@@ -431,11 +435,15 @@ export default function MapViewClient({
                   </div>
                   <button
                     type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     onClick={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       onSelectVessel(vessel);
                     }}
-                    className="w-full mt-2 py-1 px-2 rounded bg-[#0E2A38] hover:bg-[#1B3A4A] text-[#22D3EE] text-[10px] font-mono font-medium border border-[#0E2A38] hover:border-[#22D3EE]/40 transition-colors text-center cursor-pointer"
+                    className="w-full mt-2 py-1.5 px-2 rounded bg-[#0E2A38] hover:bg-[#1B3A4A] active:scale-95 text-[#22D3EE] text-[11px] font-mono font-semibold border border-[#22D3EE]/30 hover:border-[#22D3EE] transition-colors text-center cursor-pointer shadow-md select-none"
                   >
                     INSPECT VESSEL →
                   </button>

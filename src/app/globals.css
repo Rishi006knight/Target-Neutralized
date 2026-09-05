@@ -111,6 +111,37 @@ html, body {
   background: #03080D !important;
 }
 
+/* ── Leaflet Popup Fix for Instant Clickability & HUD Styling ── */
+.leaflet-popup {
+  pointer-events: auto !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  pointer-events: auto !important;
+  border-radius: 4px !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: normal !important;
+  pointer-events: auto !important;
+}
+
+.leaflet-popup-tip {
+  background: #08141C !important;
+  border: 1px solid #0E2A38 !important;
+}
+
+.leaflet-popup-content button {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
 /* ── HUD Corner Brackets ── */
 .corner-brackets {
   position: relative;

@@ -24,10 +24,13 @@ interface RightDockProps {
   vessels: AbyssalVessel[];
   clusters: IncidentCluster[];
   selectedIncident: AbyssalIncident | null;
+  selectedVessel?: AbyssalVessel | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSelectIncident: (incident: AbyssalIncident) => void;
   onDeselectIncident: () => void;
+  onSelectVessel?: (vessel: AbyssalVessel) => void;
+  onDeselectVessel?: () => void;
   onHighlightVessel: (mmsi: string) => void;
 }
 
@@ -363,16 +366,184 @@ function InvestigationDossier({
   );
 }
 
+// ── VESSEL INSPECTION DOSSIER ──
+function VesselInspectionDossier({
+  vessel,
+  incidents,
+  onBack,
+  onSelectIncident,
+}: {
+  vessel: AbyssalVessel;
+  incidents: AbyssalIncident[];
+  onBack: () => void;
+  onSelectIncident: (incident: AbyssalIncident) => void;
+}) {
+  const isDark = vessel.status === 'DARK';
+  const riskPercent = Math.round(vessel.riskScore * 100);
+  const riskColor = riskPercent >= 80 ? '#F43F5E' : riskPercent >= 50 ? '#F59E0B' : '#2DD4BF';
+  const linkedIncidents = incidents.filter((i) => i.linkedVessels.includes(vessel.mmsi));
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Back button + Locate button */}
+      <div className="flex items-center justify-between px-3 flex-shrink-0" style={{ height: 40, borderBottom: '1px solid #0E2A38' }}>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 p-1 rounded hover:text-white"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#5E7A8A',
+            cursor: 'pointer',
+            fontSize: 12,
+          }}
+        >
+          <ArrowLeft size={14} />
+          <span className="hud-label" style={{ fontSize: 10 }}>BACK TO FEED</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined' && (window as any).centerMapOnCoords) {
+              (window as any).centerMapOnCoords(vessel.lat, vessel.lng);
+            }
+          }}
+          className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#22D3EE]/15 hover:bg-[#22D3EE]/25 border border-[#22D3EE]/30 text-[#22D3EE] font-mono text-[10px] cursor-pointer"
+          title="Center map on vessel"
+        >
+          <Crosshair size={11} />
+          <span>LOCATE</span>
+        </button>
+      </div>
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-3 pb-4" style={{ scrollbarWidth: 'thin' }}>
+        {/* 1. VESSEL IDENTIFICATION */}
+        <div className="mb-4 pt-3">
+          <div className="flex items-center gap-2 mb-2">
+            {isDark ? (
+              <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-500/40 text-rose-400 font-mono text-[10px] font-bold tracking-wider animate-pulse">
+                DARK CONTACT
+              </span>
+            ) : vessel.status === 'ANCHORED' ? (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[10px] font-bold tracking-wider">
+                ANCHORED
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/35 text-[#22D3EE] font-mono text-[10px] font-bold tracking-wider">
+                ACTIVE AIS
+              </span>
+            )}
+            <span className="mono-data text-11" style={{ color: '#5E7A8A' }}>
+              MMSI: {vessel.mmsi}
+            </span>
+          </div>
+          <div className="verdict-headline" style={{ fontSize: 22 }}>
+            {vessel.name}
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#5E7A8A]">
+            <span>{vessel.type}</span>
+            <span>·</span>
+            <span>FLAG: {vessel.flag}</span>
+          </div>
+        </div>
+
+        {/* 2. TELEMETRY FACT STRIP */}
+        <div
+          className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 p-3 rounded"
+          style={{ background: 'rgba(14, 42, 56, 0.3)', border: '1px solid #0E2A3866' }}
+        >
+          <div>
+            <div className="hud-label" style={{ fontSize: 10, marginBottom: 2 }}>SPEED OVER GROUND</div>
+            <div className="mono-data text-13" style={{ color: '#22D3EE' }}>{vessel.speed} KTS</div>
+          </div>
+          <div>
+            <div className="hud-label" style={{ fontSize: 10, marginBottom: 2 }}>GYRO HEADING</div>
+            <div className="mono-data text-13" style={{ color: '#C9D6DF' }}>{Math.round(vessel.heading)}°</div>
+          </div>
+          <div>
+            <div className="hud-label" style={{ fontSize: 10, marginBottom: 2 }}>COORDINATES</div>
+            <div className="mono-data text-13" style={{ color: '#22D3EE' }}>
+              {formatCoords(vessel.lat, vessel.lng)}
+            </div>
+          </div>
+          <div>
+            <div className="hud-label" style={{ fontSize: 10, marginBottom: 2 }}>PING AGE</div>
+            <div className="mono-data text-13" style={{ color: '#C9D6DF' }}>{vessel.lastPingAge}s AGO</div>
+          </div>
+        </div>
+
+        {/* 3. THREAT EVALUATION */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="hud-label">ANOMALY THREAT EVALUATION</span>
+            <span className="mono-data text-13 font-bold" style={{ color: riskColor }}>
+              {riskPercent}% THREAT
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="w-full h-2 rounded-full overflow-hidden bg-[#0E2A38]">
+            <div
+              className="h-full transition-all duration-300 rounded-full"
+              style={{ width: `${riskPercent}%`, backgroundColor: riskColor }}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 mt-3">
+            <div className="flex items-center justify-between text-[11px] font-mono p-2 rounded bg-[#08141C] border border-[#0E2A38]">
+              <span className="text-[#5E7A8A]">Transponder Status</span>
+              <span style={{ color: isDark ? '#F43F5E' : '#2DD4BF' }}>
+                {isDark ? 'DISRUPTED (AIS Gap)' : 'NOMINAL (Transmitting)'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-mono p-2 rounded bg-[#08141C] border border-[#0E2A38]">
+              <span className="text-[#5E7A8A]">Velocity Anomaly</span>
+              <span style={{ color: vessel.speed > 25 ? '#F59E0B' : '#2DD4BF' }}>
+                {vessel.speed > 25 ? 'ELEVATED (High Speed Intercept)' : 'NORMAL (Standard Speed)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. LINKED INCIDENTS */}
+        {linkedIncidents.length > 0 && (
+          <div className="mb-4">
+            <div className="hud-label" style={{ marginBottom: 8 }}>LINKED SECURITY INCIDENTS</div>
+            <div className="flex flex-col gap-2">
+              {linkedIncidents.map((inc) => (
+                <button
+                  key={inc.id}
+                  onClick={() => onSelectIncident(inc)}
+                  className="w-full p-2.5 rounded text-left bg-[#08141C]/80 hover:bg-[#0E2A38] border border-[#0E2A38] transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[10px] font-mono text-[#22D3EE] font-bold">{inc.id}</span>
+                    <span className="text-[9px] font-mono uppercase text-[#F43F5E]">{inc.type}</span>
+                  </div>
+                  <p className="text-[11px] text-[#C9D6DF] leading-tight">{inc.verdict}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN DOCK COMPONENT ──
 export default function RightDock({
   incidents,
   vessels,
   clusters,
   selectedIncident,
+  selectedVessel,
   collapsed,
   onToggleCollapse,
   onSelectIncident,
   onDeselectIncident,
+  onSelectVessel,
+  onDeselectVessel,
   onHighlightVessel,
 }: RightDockProps) {
   const sortedIncidents = [...incidents].sort((a, b) => {
@@ -423,6 +594,13 @@ export default function RightDock({
             clusters={clusters}
             onBack={onDeselectIncident}
             onHighlightVessel={onHighlightVessel}
+          />
+        ) : selectedVessel ? (
+          <VesselInspectionDossier
+            vessel={selectedVessel}
+            incidents={incidents}
+            onBack={onDeselectVessel || onDeselectIncident}
+            onSelectIncident={onSelectIncident}
           />
         ) : (
           <>
