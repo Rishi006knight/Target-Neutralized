@@ -29,7 +29,7 @@ export async function GET(req: Request) {
           else if ((v.speed || 0) < 0.8) status = 'ANCHORED';
 
           return {
-            id: v.id || Math.abs(String(v.mmsi).hashCode?.() || 1000),
+            id: v.id || Math.abs(Array.from(String(v.mmsi)).reduce((acc, c) => acc * 31 + c.charCodeAt(0), 0)),
             mmsi: String(v.mmsi),
             name: v.name || `VESSEL_${v.mmsi}`,
             type: v.type || 'Commercial Cargo',

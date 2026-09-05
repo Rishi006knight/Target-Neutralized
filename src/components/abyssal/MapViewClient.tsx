@@ -169,6 +169,7 @@ export default function MapViewClient({
   onSelectVessel,
 }: MapViewClientProps) {
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapLayer, setMapLayer] = useState<'tactical' | 'esri_dark' | 'satellite'>('tactical');
 
   const selectedIncident = useMemo(
     () => incidents.find((i) => i.id === selectedIncidentId) || null,
@@ -224,11 +225,29 @@ export default function MapViewClient({
         className="w-full h-full z-0"
         style={{ background: '#03080D' }}
       >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          maxZoom={19}
-          subdomains="abcd"
-        />
+        {mapLayer === 'tactical' && (
+          <TileLayer
+            key="tactical"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+            subdomains={['a', 'b', 'c']}
+            className="abyssal-dark-tiles"
+          />
+        )}
+        {mapLayer === 'esri_dark' && (
+          <TileLayer
+            key="esri_dark"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={16}
+          />
+        )}
+        {mapLayer === 'satellite' && (
+          <TileLayer
+            key="satellite"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={18}
+          />
+        )}
 
         <MapNavigationController
           selectedIncident={selectedIncident}
@@ -374,6 +393,40 @@ export default function MapViewClient({
           );
         })}
       </MapContainer>
+
+      {/* ── Basemap Mode Switcher (Top Right floating HUD control) ── */}
+      <div className="absolute top-3 right-16 z-20 flex items-center gap-1 p-1 rounded bg-[#08141C]/85 border border-[#0E2A38] backdrop-blur text-[10px] font-mono shadow-xl">
+        <button
+          onClick={() => setMapLayer('tactical')}
+          className={`px-2 py-0.5 rounded transition-colors ${
+            mapLayer === 'tactical'
+              ? 'bg-[#22D3EE]/20 text-[#22D3EE] border border-[#22D3EE]/40 font-semibold'
+              : 'text-[#5E7A8A] hover:text-[#C9D6DF]'
+          }`}
+        >
+          TACTICAL
+        </button>
+        <button
+          onClick={() => setMapLayer('esri_dark')}
+          className={`px-2 py-0.5 rounded transition-colors ${
+            mapLayer === 'esri_dark'
+              ? 'bg-[#22D3EE]/20 text-[#22D3EE] border border-[#22D3EE]/40 font-semibold'
+              : 'text-[#5E7A8A] hover:text-[#C9D6DF]'
+          }`}
+        >
+          DARK CANVAS
+        </button>
+        <button
+          onClick={() => setMapLayer('satellite')}
+          className={`px-2 py-0.5 rounded transition-colors ${
+            mapLayer === 'satellite'
+              ? 'bg-[#22D3EE]/20 text-[#22D3EE] border border-[#22D3EE]/40 font-semibold'
+              : 'text-[#5E7A8A] hover:text-[#C9D6DF]'
+          }`}
+        >
+          SATELLITE
+        </button>
+      </div>
 
       {/* ── Coordinates & Crosshair Readout (Bottom Center) ── */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">

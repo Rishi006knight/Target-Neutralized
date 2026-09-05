@@ -36,6 +36,7 @@ export interface AnomalyReport {
   severity: 'critical' | 'high' | 'warning' | 'info';
   riskScore: number;
   message: string;
+  isDark: boolean;
   timestamp: string;
 }
 
@@ -108,6 +109,7 @@ export function analyzeVesselAnomaly(
     severity,
     riskScore,
     message,
+    isDark,
     timestamp: new Date().toISOString(),
   };
 }

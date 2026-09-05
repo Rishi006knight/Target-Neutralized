@@ -2,9 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: false, // Prevent double-mounting with Deck.gl/MapLibre
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -13,7 +10,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**.basemaps.cartocdn.com',
+        hostname: '**.tile.openstreetmap.org',
+      },
+      {
+        protocol: 'https',
+        hostname: 'server.arcgisonline.com',
       },
     ],
   },
