@@ -136,21 +136,37 @@ function InvestigationDossier({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 px-3 py-2 mb-2 rounded"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#5E7A8A',
-          cursor: 'pointer',
-          fontSize: 12,
-        }}
-      >
-        <ArrowLeft size={14} />
-        <span className="hud-label" style={{ fontSize: 10 }}>BACK TO FEED</span>
-      </button>
+      {/* Back button + Locate button */}
+      <div className="flex items-center justify-between px-3" style={{ height: 40, borderBottom: '1px solid #0E2A38' }}>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 p-1 rounded hover:text-white"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#5E7A8A',
+            cursor: 'pointer',
+            fontSize: 12,
+          }}
+        >
+          <ArrowLeft size={14} />
+          <span className="hud-label" style={{ fontSize: 10 }}>BACK TO FEED</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== 'undefined' && (window as any).centerMapOnCoords) {
+              (window as any).centerMapOnCoords(incident.lat, incident.lng);
+            }
+          }}
+          className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#22D3EE]/15 hover:bg-[#22D3EE]/25 border border-[#22D3EE]/30 text-[#22D3EE] font-mono text-[10px] cursor-pointer"
+          title="Center map on incident"
+        >
+          <Crosshair size={11} />
+          <span>LOCATE</span>
+        </button>
+      </div>
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-3 pb-4" style={{ scrollbarWidth: 'thin' }}>

@@ -32,7 +32,7 @@ interface MapViewClientProps {
   onSelectVessel: (vessel: AbyssalVessel) => void;
 }
 
-// Controller to fly to active incident or vessel
+// Controller for free roaming navigation without forced camera locking
 function MapNavigationController({
   selectedIncident,
   selectedVessel,
@@ -41,6 +41,7 @@ function MapNavigationController({
   selectedVessel: AbyssalVessel | null;
 }) {
   const map = useMap();
+  const lastTargetIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     map.invalidateSize();
@@ -48,19 +49,51 @@ function MapNavigationController({
     return () => clearTimeout(t);
   }, [map]);
 
+  // Expose manual re-center function on window for user-initiated clicks
   useEffect(() => {
-    if (selectedIncident) {
-      map.flyTo([selectedIncident.lat, selectedIncident.lng], 9, {
-        duration: 1.2,
+    (window as any).centerMapOnCoords = (lat: number, lng: number) => {
+      map.flyTo([lat, lng], Math.max(map.getZoom(), 8), {
+        duration: 1.0,
         easeLinearity: 0.25,
+      });
+    };
+    return () => {
+      delete (window as any).centerMapOnCoords;
+    };
+  }, [map]);
+
+  // Only pan ONCE when user explicitly selects a new item
+  // Never re-fly or lock camera during telemetry stream updates — user has 100% free roaming!
+  useEffect(() => {
+    const currentTargetId = selectedIncident
+      ? selectedIncident.id
+      : selectedVessel
+      ? selectedVessel.mmsi
+      : null;
+
+    if (!currentTargetId) {
+      lastTargetIdRef.current = null;
+      return;
+    }
+
+    if (currentTargetId === lastTargetIdRef.current) {
+      return;
+    }
+
+    lastTargetIdRef.current = currentTargetId;
+
+    if (selectedIncident) {
+      map.panTo([selectedIncident.lat, selectedIncident.lng], {
+        animate: true,
+        duration: 0.8,
       });
     } else if (selectedVessel) {
-      map.flyTo([selectedVessel.lat, selectedVessel.lng], 9, {
-        duration: 1.2,
-        easeLinearity: 0.25,
+      map.panTo([selectedVessel.lat, selectedVessel.lng], {
+        animate: true,
+        duration: 0.8,
       });
     }
-  }, [selectedIncident, selectedVessel, map]);
+  }, [selectedIncident?.id, selectedVessel?.mmsi, map]);
 
   return null;
 }
@@ -339,9 +372,18 @@ export default function MapViewClient({
                   <p className="text-[12px] font-sans text-[#C9D6DF] leading-tight mb-2">
                     {incident.verdict}
                   </p>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-[#5E7A8A] pt-1.5 border-t border-[#0E2A38]">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[#5E7A8A] pt-2 border-t border-[#0E2A38] mt-2">
                     <span>{formatCoords(incident.lat, incident.lng)}</span>
-                    <span className="text-[#22D3EE] font-medium">OPEN DOSSIER →</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectIncident(incident);
+                      }}
+                      className="px-2.5 py-1 rounded bg-[#22D3EE]/20 hover:bg-[#22D3EE]/30 active:scale-95 border border-[#22D3EE]/40 text-[#22D3EE] font-mono text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-md"
+                    >
+                      OPEN DOSSIER →
+                    </button>
                   </div>
                 </div>
               </Popup>
@@ -387,6 +429,16 @@ export default function MapViewClient({
                     <div>HDG: <span className="text-[#C9D6DF]">{Math.round(vessel.heading)}°</span></div>
                     <div>RISK: <span className={vessel.riskScore > 0.7 ? 'text-amber-400' : 'text-[#2DD4BF]'}>{Math.round(vessel.riskScore * 100)}%</span></div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectVessel(vessel);
+                    }}
+                    className="w-full mt-2 py-1 px-2 rounded bg-[#0E2A38] hover:bg-[#1B3A4A] text-[#22D3EE] text-[10px] font-mono font-medium border border-[#0E2A38] hover:border-[#22D3EE]/40 transition-colors text-center cursor-pointer"
+                  >
+                    INSPECT VESSEL →
+                  </button>
                 </div>
               </Popup>
             </Marker>
