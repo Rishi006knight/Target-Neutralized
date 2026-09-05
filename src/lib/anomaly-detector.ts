@@ -2,9 +2,32 @@
  * Maritime Threat & Anomaly Detection Engine
  * Evaluates real-time vessel telemetry against known risk parameters,
  * spatial hazard zones, and behavioral patterns.
+ * 
+ * Adapted for OCEANSHIELD 2.0 Abyssal types.
  */
 
-import { HotspotDef, staticHotspots, Vessel, Alert } from './mock-data';
+import { type AbyssalVessel } from './mock-data';
+
+// Known piracy hotspot bounding boxes
+interface HotspotDef {
+  name: string;
+  latMin: number;
+  latMax: number;
+  lngMin: number;
+  lngMax: number;
+  baseRisk: number;
+  zoneType: string;
+}
+
+export const HOTSPOTS: HotspotDef[] = [
+  { name: 'Gulf of Aden (IRTC Corridor)', latMin: 11.0, latMax: 15.0, lngMin: 43.0, lngMax: 52.0, baseRisk: 0.92, zoneType: 'Piracy Corridor' },
+  { name: 'Gulf of Guinea (Niger Delta)', latMin: 0.0, latMax: 7.0, lngMin: 0.0, lngMax: 10.0, baseRisk: 0.88, zoneType: 'Armed Kidnapping Zone' },
+  { name: 'Strait of Malacca & Singapore', latMin: 1.0, latMax: 7.0, lngMin: 98.0, lngMax: 105.0, baseRisk: 0.62, zoneType: 'Armed Robbery Corridor' },
+  { name: 'Somali Basin & East Coast', latMin: -5.0, latMax: 10.0, lngMin: 45.0, lngMax: 56.0, baseRisk: 0.84, zoneType: 'Mother-Ship Range' },
+  { name: 'Southern Red Sea & Bab-el-Mandeb', latMin: 12.0, latMax: 16.0, lngMin: 41.0, lngMax: 44.5, baseRisk: 0.95, zoneType: 'Direct Kinetic Attack Zone' },
+  { name: 'Strait of Hormuz', latMin: 25.0, latMax: 27.5, lngMin: 55.0, lngMax: 58.0, baseRisk: 0.72, zoneType: 'State Actor Zone' },
+  { name: 'Sulu-Celebes Sea', latMin: 2.0, latMax: 9.0, lngMin: 118.0, lngMax: 125.0, baseRisk: 0.68, zoneType: 'Maritime Insurgency Risk' },
+];
 
 export interface AnomalyReport {
   vesselMmsi: string;
@@ -16,31 +39,9 @@ export interface AnomalyReport {
   timestamp: string;
 }
 
-/**
- * Calculates Great-Circle distance between two coordinates in kilometers using Haversine formula
- */
-export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-/**
- * Check if a coordinate falls within a defined hotspot bounding box
- */
-export function findMatchingHotspot(lat: number, lng: number): HotspotDef | null {
-  for (const hotspot of staticHotspots) {
-    if (
-      lat >= hotspot.latMin &&
-      lat <= hotspot.latMax &&
-      lng >= hotspot.lngMin &&
-      lng <= hotspot.lngMax
-    ) {
+function findMatchingHotspot(lat: number, lng: number): HotspotDef | null {
+  for (const hotspot of HOTSPOTS) {
+    if (lat >= hotspot.latMin && lat <= hotspot.latMax && lng >= hotspot.lngMin && lng <= hotspot.lngMax) {
       return hotspot;
     }
   }
@@ -48,58 +49,56 @@ export function findMatchingHotspot(lat: number, lng: number): HotspotDef | null
 }
 
 /**
- * Evaluates an individual vessel's telemetry to detect anomalies and calculate a dynamic threat score
+ * Evaluates a vessel's telemetry to detect anomalies and calculate a dynamic threat score.
+ * Works with both AbyssalVessel and legacy AIS-stream ingested vessels.
  */
 export function analyzeVesselAnomaly(
-  vessel: Vessel,
-  previousPosition?: { lat: number; lng: number; timestamp: number }
+  vessel: { mmsi: string; name: string; lat: number; lng: number; speed: number; heading: number; status?: string; isDark?: boolean }
 ): AnomalyReport {
   const hotspot = findMatchingHotspot(vessel.lat, vessel.lng);
-  let riskScore = 0.05; // Baseline low risk
+  const isDark = vessel.status === 'DARK' || vessel.isDark === true;
+  let riskScore = 0.05;
   let anomalyType: AnomalyReport['anomalyType'] = 'normal';
   let severity: AnomalyReport['severity'] = 'info';
-  let message = `Vessel ${vessel.name} [MMSI: ${vessel.mmsi}] operating within normal parameters.`;
+  let message = `Vessel ${vessel.name} [${vessel.mmsi}] operating within normal parameters.`;
 
-  // 1. Dark Vessel Detection (Transponder turned off / flagged dark)
-  if (vessel.isDark) {
+  // 1. Dark Vessel Detection
+  if (isDark) {
     riskScore += 0.45;
     anomalyType = 'ais_gap';
     severity = 'high';
-    message = `Transponder Blackout: Vessel ${vessel.name} dropped AIS broadcast. Non-emitting contact detected via Radar/SAR.`;
+    message = `Transponder Blackout: ${vessel.name} dropped AIS broadcast.`;
   }
 
-  // 2. High-Risk Piracy Hotspot Entry
+  // 2. Hotspot Entry
   if (hotspot) {
     riskScore += hotspot.baseRisk * 0.4;
     if (anomalyType === 'normal') {
       anomalyType = 'hotspot_entry';
       severity = hotspot.baseRisk > 0.8 ? 'high' : 'warning';
-      message = `High-Risk Zone Transit: Vessel ${vessel.name} entered ${hotspot.name} (${hotspot.zoneType.toUpperCase()}).`;
-    } else if (vessel.isDark) {
+      message = `High-Risk Zone: ${vessel.name} entered ${hotspot.name}.`;
+    } else if (isDark) {
       severity = 'critical';
-      message = `CRITICAL THREAT: Dark vessel ${vessel.name} operating without AIS inside ${hotspot.name}. Possible piracy/interception posture.`;
+      message = `CRITICAL: Dark vessel ${vessel.name} inside ${hotspot.name}.`;
       riskScore = Math.min(0.98, riskScore + 0.35);
     }
   }
 
   // 3. Speed Anomalies
-  // High-speed skiff / interception (> 24 knots in high risk area or unexpected burst)
   if (vessel.speed > 24) {
-    if (hotspot || vessel.isDark) {
+    if (hotspot || isDark) {
       riskScore = Math.min(0.95, riskScore + 0.3);
       anomalyType = 'high_speed_approach';
       severity = 'critical';
-      message = `High-Speed Intercept Profile: ${vessel.name} moving at ${vessel.speed.toFixed(1)} kts in ${hotspot ? hotspot.name : 'monitored corridor'}.`;
+      message = `High-Speed Intercept: ${vessel.name} at ${vessel.speed.toFixed(1)} kts in ${hotspot ? hotspot.name : 'monitored corridor'}.`;
     }
-  } else if (vessel.speed < 1.0 && hotspot && !vessel.isDark) {
-    // Suspicious drifting / loitering in choke point
+  } else if (vessel.speed < 1.0 && hotspot && !isDark) {
     riskScore = Math.min(0.85, riskScore + 0.25);
     anomalyType = 'loitering';
     severity = 'warning';
-    message = `Vessel Loitering: ${vessel.name} stationary/drifting (${vessel.speed.toFixed(1)} kts) within ${hotspot.name}.`;
+    message = `Loitering: ${vessel.name} at ${vessel.speed.toFixed(1)} kts in ${hotspot.name}.`;
   }
 
-  // Clamp risk score to [0.0, 1.0]
   riskScore = Math.min(1.0, Math.max(0.05, parseFloat(riskScore.toFixed(2))));
 
   return {
@@ -113,31 +112,14 @@ export function analyzeVesselAnomaly(
   };
 }
 
-/**
- * Generates an Alert item from an AnomalyReport if threat threshold is met
- */
-export function convertAnomalyToAlert(report: AnomalyReport, alertIdSeed: number = Date.now()): Alert | null {
-  if (report.anomalyType === 'normal' || report.riskScore < 0.35) {
-    return null;
-  }
-
-  const title =
-    report.anomalyType === 'ais_gap'
-      ? 'AIS Transponder Gap Detected'
-      : report.anomalyType === 'high_speed_approach'
-      ? 'High-Speed Intercept Warning'
-      : report.anomalyType === 'loitering'
-      ? 'Suspicious Loitering / Rendezvous'
-      : 'Hazard Zone Entry Alert';
-
-  return {
-    id: alertIdSeed,
-    severity: report.severity,
-    title,
-    message: report.message,
-    isRead: false,
-    relatedVesselMmsi: report.vesselMmsi,
-    relatedIncidentId: null,
-    createdAt: report.timestamp,
-  };
+export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }

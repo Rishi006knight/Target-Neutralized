@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import type { Vessel } from '@/lib/mock-data';
+import type { AbyssalVessel, VesselStatus } from '@/lib/mock-data';
+import { seedVessels } from '@/lib/mock-data';
 import { analyzeVesselAnomaly } from '@/lib/anomaly-detector';
 
 // Define the expected AISstream message structure for a PositionReport
@@ -27,114 +28,12 @@ interface AISMessage {
 }
 
 const AISSTREAM_URL = 'wss://stream.aisstream.io/v0/stream';
-const MAX_VESSELS = 250; // Limit the number of live vessels in memory
-
-// Simulated initial vessels for zero-config live demonstrations
-const SEED_SIMULATED_VESSELS: Vessel[] = [
-  {
-    id: 901,
-    mmsi: '538006842',
-    name: 'MAERSK KALAMATA',
-    type: 'Container Ship',
-    flag: 'Marshall Islands',
-    lat: 12.65,
-    lng: 44.80,
-    speed: 18.2,
-    heading: 85,
-    isDark: false,
-    riskScore: 0.28,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 902,
-    mmsi: '636015993',
-    name: 'MSC ANNA',
-    type: 'Ultra Large Container',
-    flag: 'Liberia',
-    lat: 13.05,
-    lng: 47.10,
-    speed: 19.5,
-    heading: 90,
-    isDark: false,
-    riskScore: 0.32,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 903,
-    mmsi: '999841201',
-    name: 'SKIKDA PIRACY SKIFF A',
-    type: 'Fast Attack Skiff',
-    flag: 'Unknown',
-    lat: 12.92,
-    lng: 45.45,
-    speed: 29.4,
-    heading: 175,
-    isDark: true,
-    riskScore: 0.96,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 904,
-    mmsi: '477312900',
-    name: 'COSCO SHIPPING PLANET',
-    type: 'Container Ship',
-    flag: 'Hong Kong',
-    lat: 4.80,
-    lng: 5.20,
-    speed: 15.6,
-    heading: 135,
-    isDark: false,
-    riskScore: 0.52,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 905,
-    mmsi: '636098112',
-    name: 'NIGER DELTA TANKER 03',
-    type: 'Bunkering Vessel',
-    flag: 'Nigeria',
-    lat: 4.10,
-    lng: 6.45,
-    speed: 7.2,
-    heading: 270,
-    isDark: true,
-    riskScore: 0.88,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 906,
-    mmsi: '563110200',
-    name: 'EVER GLORY',
-    type: 'Container Ship',
-    flag: 'Singapore',
-    lat: 2.95,
-    lng: 102.30,
-    speed: 16.8,
-    heading: 315,
-    isDark: false,
-    riskScore: 0.20,
-    lastSeenAt: new Date().toISOString(),
-  },
-  {
-    id: 907,
-    mmsi: '357220199',
-    name: 'PANAMA TRADER IX',
-    type: 'General Cargo',
-    flag: 'Panama',
-    lat: 11.80,
-    lng: 112.50,
-    speed: 13.4,
-    heading: 55,
-    isDark: false,
-    riskScore: 0.35,
-    lastSeenAt: new Date().toISOString(),
-  },
-];
+const MAX_VESSELS = 250;
 
 export function useAisStream() {
-  const [liveVessels, setLiveVessels] = useState<Map<string, Vessel>>(() => {
-    const initialMap = new Map<string, Vessel>();
-    SEED_SIMULATED_VESSELS.forEach((v) => initialMap.set(v.mmsi, v));
+  const [liveVessels, setLiveVessels] = useState<Map<string, AbyssalVessel>>(() => {
+    const initialMap = new Map<string, AbyssalVessel>();
+    seedVessels.forEach((v) => initialMap.set(v.mmsi, v));
     return initialMap;
   });
   const [isConnected, setIsConnected] = useState(true);
@@ -146,29 +45,37 @@ export function useAisStream() {
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_AISSTREAM_API_KEY;
 
-    // Continuous simulation ticker for background motion
+    // Continuous ticker for background motion & ping age calculation
     simIntervalRef.current = setInterval(() => {
       setLiveVessels((prev) => {
         const next = new Map(prev);
         next.forEach((vessel, mmsi) => {
+          if (vessel.status === 'ANCHORED') {
+            return;
+          }
+
           const rad = ((vessel.heading || 0) * Math.PI) / 180;
-          const deltaSpeed = (Math.random() - 0.5) * 0.4;
-          const newSpeed = Math.max(2, Math.min(32, (vessel.speed || 10) + deltaSpeed));
+          const deltaSpeed = (Math.random() - 0.5) * 0.3;
+          const newSpeed = Math.max(1.5, Math.min(32, (vessel.speed || 10) + deltaSpeed));
           const speedDegPerSec = (newSpeed * 1.852) / (111.32 * 3600);
           const newLat = (vessel.lat || 0) + Math.cos(rad) * speedDegPerSec * 4;
           const newLng = (vessel.lng || 0) + Math.sin(rad) * speedDegPerSec * 4;
 
-          const updatedVessel: Vessel = {
+          const updatedVessel: AbyssalVessel = {
             ...vessel,
             lat: parseFloat(newLat.toFixed(5)),
             lng: parseFloat(newLng.toFixed(5)),
             speed: parseFloat(newSpeed.toFixed(1)),
-            heading: ((vessel.heading || 0) + (Math.random() - 0.5) * 2 + 360) % 360,
+            heading: ((vessel.heading || 0) + (Math.random() - 0.5) * 1.5 + 360) % 360,
+            lastPingAge: Math.max(0, vessel.lastPingAge + 4),
             lastSeenAt: new Date().toISOString(),
           };
 
           const anomaly = analyzeVesselAnomaly(updatedVessel);
           updatedVessel.riskScore = anomaly.riskScore;
+          if (anomaly.isDark) {
+            updatedVessel.status = 'DARK';
+          }
 
           next.set(mmsi, updatedVessel);
         });
@@ -191,6 +98,7 @@ export function useAisStream() {
 
         ws.onopen = () => {
           setIsConnected(true);
+          setIsSimulated(false);
           setError(null);
           const subscriptionMessage = {
             Apikey: apiKey,
@@ -221,7 +129,13 @@ export function useAisStream() {
               const report = data.Message.PositionReport;
               const meta = data.MetaData;
 
-              const candidateVessel: Vessel = {
+              const speed = report.Sog || 0;
+              let status: VesselStatus = 'ACTIVE';
+              if (speed < 0.8) {
+                status = 'ANCHORED';
+              }
+
+              const candidateVessel: AbyssalVessel = {
                 id: meta.MMSI,
                 mmsi: String(meta.MMSI),
                 name: meta.ShipName?.trim() || `VESSEL_${meta.MMSI}`,
@@ -229,15 +143,19 @@ export function useAisStream() {
                 flag: 'International',
                 lat: report.Latitude,
                 lng: report.Longitude,
-                speed: report.Sog,
-                heading: report.TrueHeading,
-                isDark: false,
+                speed,
+                heading: report.TrueHeading >= 360 ? 0 : report.TrueHeading,
+                status,
                 riskScore: 0.1,
+                lastPingAge: 0,
                 lastSeenAt: new Date(meta.time_utc).toISOString(),
               };
 
               const anomaly = analyzeVesselAnomaly(candidateVessel);
               candidateVessel.riskScore = anomaly.riskScore;
+              if (anomaly.isDark) {
+                candidateVessel.status = 'DARK';
+              }
 
               setLiveVessels((prev) => {
                 const next = new Map(prev);
@@ -256,7 +174,7 @@ export function useAisStream() {
 
         ws.onerror = (e) => {
           console.error('AISStream WebSocket error', e);
-          setError('WebSocket connection fallback to simulation');
+          setError('WebSocket fallback to simulation');
         };
 
         ws.onclose = () => {

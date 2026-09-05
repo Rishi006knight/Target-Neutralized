@@ -1,337 +1,245 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { AppLayout, PageId } from '@/components/layout/AppLayout';
-import DashboardPage from '@/components/dashboard/DashboardPage';
-import MapPage from '@/components/map/MapPage';
-import IncidentsPage from '@/components/incidents/IncidentsPage';
-import VesselsPage from '@/components/vessels/VesselsPage';
-import AlertsPage from '@/components/alerts/AlertsPage';
-import AnalyticsPage from '@/components/analytics/AnalyticsPage';
-import AlertRulesPage from '@/components/rules/AlertRulesPage';
-import VesselDetailDrawer from '@/components/vessels/VesselDetailDrawer';
-import IncidentDetailModal from '@/components/incidents/IncidentDetailModal';
-import ReportIncidentModal from '@/components/incidents/ReportIncidentModal';
-import CommandPalette from '@/components/command/CommandPalette';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import HudBar from '@/components/abyssal/HudBar';
+import MapView from '@/components/abyssal/MapView';
+import RightDock from '@/components/abyssal/RightDock';
+import ThreatWindows from '@/components/abyssal/ThreatWindows';
+import ClusterOverlay from '@/components/abyssal/ClusterOverlay';
+import CommandPalette from '@/components/abyssal/CommandPalette';
 import {
-  useDashboardStats,
-  useIncidents,
-  useIncidentSummary,
-  useIncidentTrend,
-  useVessels,
-  useRiskZones,
-  useAlerts,
-  useMarkAlertRead,
-  useCreateIncident,
-} from '@/hooks/use-maritime-data';
+  useAbyssalIncidents,
+  useAbyssalVessels,
+  useAbyssalThreatWindows,
+  useAbyssalClusters,
+} from '@/hooks/use-abyssal-data';
 import { useAisStream } from '@/hooks/use-ais-stream';
 import {
-  mockStats,
-  mockIncidents,
-  mockVessels,
-  mockRiskZones,
-  mockAlerts,
-  type Vessel,
-  type Incident,
-  type Alert,
+  type AbyssalIncident,
+  type AbyssalVessel,
+  getActiveIncidentCount,
 } from '@/lib/mock-data';
-import { toast } from 'sonner';
 
-export default function Home() {
-  const [activePage, setActivePage] = useState<PageId>('dashboard');
+export default function AbyssalThreatConsole() {
+  // Queries
+  const { data: incidents = [] } = useAbyssalIncidents();
+  const { data: baseVessels = [] } = useAbyssalVessels();
+  const { data: threatWindows = [] } = useAbyssalThreatWindows();
+  const { data: clusters = [] } = useAbyssalClusters();
+
+  // Real-time live AIS telemetry stream
+  const { liveVessels, isConnected, isSimulated } = useAisStream();
+
+  // Selection & UI state
+  const [selectedIncident, setSelectedIncident] = useState<AbyssalIncident | null>(null);
+  const [selectedVesselMmsi, setSelectedVesselMmsi] = useState<string | null>(null);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
-  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [showClusters, setShowClusters] = useState(false);
+  const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
+  const [rightDockCollapsed, setRightDockCollapsed] = useState(false);
 
-  const { data: stats } = useDashboardStats();
-  const { data: incidents, refetch: refetchIncidents } = useIncidents();
-  const { data: incidentSummary } = useIncidentSummary();
-  const { data: incidentTrend } = useIncidentTrend();
-  const { data: vessels } = useVessels();
-  const { data: riskZones } = useRiskZones();
-  const { data: alerts } = useAlerts();
+  // Merge base vessels with real-time AIS stream (live stream takes precedence)
+  const allVessels = useMemo(() => {
+    const vesselMap = new Map<string, AbyssalVessel>();
+    baseVessels.forEach((v) => vesselMap.set(v.mmsi, v));
+    liveVessels.forEach((v) => vesselMap.set(v.mmsi, v));
+    return Array.from(vesselMap.values());
+  }, [baseVessels, liveVessels]);
 
-  const markAlertReadMutation = useMarkAlertRead();
-  const createIncidentMutation = useCreateIncident();
-  const { liveVessels } = useAisStream();
+  // Audio cue synthesizer (Web Audio API)
+  const playHudBeep = useCallback((freq = 880, type: OscillatorType = 'sine', duration = 0.08) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch {
+      // Audio context policy fallback
+    }
+  }, []);
 
-  // Local state for dynamic real-time simulated telemetry & alerts
-  const [activeAlerts, setActiveAlerts] = useState<Alert[]>(() => mockAlerts);
-  const [selectedVessel, setSelectedVessel] = useState<Vessel | null>(null);
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [satDetectionsCount, setSatDetectionsCount] = useState<number>(1204);
-
-  // Global Keyboard Shortcuts (Cmd+K / Ctrl+K, Cmd+1-5, Escape)
+  // Keyboard Shortcuts (⌘K, Escape, C, D)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K / Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandOpen((prev) => !prev);
-      }
-      // Cmd+1-5 Switch Pages
-      if (e.metaKey || e.ctrlKey) {
-        if (e.key === '1') { e.preventDefault(); setActivePage('dashboard'); }
-        if (e.key === '2') { e.preventDefault(); setActivePage('map'); }
-        if (e.key === '3') { e.preventDefault(); setActivePage('incidents'); }
-        if (e.key === '4') { e.preventDefault(); setActivePage('vessels'); }
-        if (e.key === '5') { e.preventDefault(); setActivePage('alerts'); }
-      }
-      // Escape
-      if (e.key === 'Escape') {
-        setSelectedVessel(null);
-        setSelectedIncident(null);
-        setIsCommandOpen(false);
-        setIsReportOpen(false);
+        playHudBeep(1200, 'sine', 0.05);
+      } else if (e.key === 'Escape') {
+        if (isCommandOpen) {
+          setIsCommandOpen(false);
+        } else if (selectedIncident) {
+          setSelectedIncident(null);
+          playHudBeep(600, 'triangle', 0.04);
+        }
+      } else if (e.key.toLowerCase() === 'c' && !isCommandOpen && e.target === document.body) {
+        setShowClusters((prev) => !prev);
+        playHudBeep(750, 'sine', 0.04);
+      } else if (e.key.toLowerCase() === 'd' && !isCommandOpen && e.target === document.body) {
+        setRightDockCollapsed((prev) => !prev);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isCommandOpen, selectedIncident, playHudBeep]);
 
-  // Sync initial alerts
-  useEffect(() => {
-    if (alerts && alerts.length > 0) {
-      setActiveAlerts(alerts);
+  // Handle incident selection (opens dossier in RightDock & highlights)
+  const handleSelectIncident = useCallback((incident: AbyssalIncident) => {
+    setSelectedIncident(incident);
+    setSelectedVesselMmsi(null);
+    setRightDockCollapsed(false);
+    playHudBeep(incident.severity === 'critical' ? 950 : 700, 'sawtooth', 0.09);
+  }, [playHudBeep]);
+
+  const handleDeselectIncident = useCallback(() => {
+    setSelectedIncident(null);
+    playHudBeep(520, 'sine', 0.04);
+  }, [playHudBeep]);
+
+  // Handle vessel highlighting
+  const handleSelectVessel = useCallback((vessel: AbyssalVessel) => {
+    setSelectedVesselMmsi(vessel.mmsi);
+    // If vessel is linked to an incident, open that incident's dossier
+    const linkedIncident = incidents.find((i) => i.linkedVessels.includes(vessel.mmsi));
+    if (linkedIncident) {
+      setSelectedIncident(linkedIncident);
     }
-  }, [alerts]);
-
-  // 8.8 Simulated Real-Time Engine (Coordinate jitter, emergency incident toasts, sat counter)
-  useEffect(() => {
-    // 1. Sat detections counter increment
-    const satInterval = setInterval(() => {
-      setSatDetectionsCount((prev) => prev + Math.floor(Math.random() * 3) + 1);
-    }, 10000);
-
-    // 2. Periodic tactical emergency alerts
-    const alertSpawnInterval = setInterval(() => {
-      const sampleAlertTitles = [
-        'FAST SKIFF INTERCEPT DETECTED — GULF OF ADEN',
-        'AIS TRANSPONDER DROP — BONNY OFFSHORE',
-        'SUSPICIOUS RENDEZVOUS IDENTIFIED BY SAR SATELLITE',
-      ];
-      const randomTitle = sampleAlertTitles[Math.floor(Math.random() * sampleAlertTitles.length)];
-
-      const spawnedAlert: Alert = {
-        id: Date.now(),
-        severity: 'critical',
-        category: 'Critical',
-        title: randomTitle,
-        message: `Tactical sensor grid detected aggressive surface approach at 28.5 kts closing on monitored transit corridor.`,
-        isRead: false,
-        relatedVesselMmsi: '538006842',
-        relatedIncidentId: 101,
-        createdAt: new Date().toISOString(),
-      };
-
-      setActiveAlerts((prev) => [spawnedAlert, ...prev]);
-
-      toast.error(spawnedAlert.title, {
-        description: spawnedAlert.message,
-        duration: 8000,
-        action: {
-          label: 'VIEW ALERT',
-          onClick: () => setActivePage('alerts'),
-        },
-      });
-    }, 60000);
-
-    return () => {
-      clearInterval(satInterval);
-      clearInterval(alertSpawnInterval);
-    };
-  }, []);
-
-  const unreadCount = activeAlerts.filter((a) => !a.isRead).length;
-
-  const currentStats = {
-    ...(stats || mockStats),
-    satDetectionsCount,
-    unreadAlerts: unreadCount,
-  };
-
-  const currentIncidents = Array.isArray(incidents) && incidents.length > 0 ? incidents : mockIncidents;
-  const currentRiskZones = Array.isArray(riskZones) && riskZones.length > 0 ? riskZones : mockRiskZones;
-  const currentVessels = liveVessels?.length > 0 ? liveVessels : vessels || mockVessels;
-  const currentSummary = incidentSummary || {
-    total: 6,
-    bySeverity: { critical: 3, high: 2, medium: 1, low: 0 },
-    byType: { boarding: 2, hijack: 1, approach: 2, ais_gap: 1 },
-  };
-  const currentTrend = Array.isArray(incidentTrend) && incidentTrend.length > 0 ? incidentTrend : [
-    { month: '2025-11', count: 14 },
-    { month: '2025-12', count: 22 },
-    { month: '2026-01', count: 18 },
-    { month: '2026-02', count: 25 },
-    { month: '2026-03', count: 19 },
-    { month: '2026-04', count: 23 },
-  ];
-
-  const handleMarkAlertRead = (id: number) => {
-    setActiveAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isRead: true } : a)));
-    markAlertReadMutation.mutate(id);
-  };
-
-  const handleMarkAllAlertsRead = () => {
-    setActiveAlerts((prev) => prev.map((a) => ({ ...a, isRead: true })));
-  };
-
-  const handleClearResolvedAlerts = () => {
-    setActiveAlerts((prev) => prev.filter((a) => !a.isRead));
-  };
+    playHudBeep(800, 'sine', 0.05);
+  }, [incidents, playHudBeep]);
 
   return (
-    <AppLayout
-      activePage={activePage}
-      onNavigate={setActivePage}
-      unreadAlertsCount={unreadCount}
-      onOpenCommandPalette={() => setIsCommandOpen(true)}
-    >
-      {/* 1. Dashboard View */}
-      {activePage === 'dashboard' && (
-        <DashboardPage
-          stats={currentStats}
-          riskZones={currentRiskZones}
-          incidentSummary={currentSummary}
-          incidentTrend={currentTrend}
-          activeIncidents={currentIncidents}
-          loading={false}
-          onNavigateAlerts={() => setActivePage('alerts')}
-          onNavigateMap={() => setActivePage('map')}
-          onSelectIncident={(inc) => setSelectedIncident(inc)}
-          onSelectVesselMmsi={(mmsi) => {
-            const v = currentVessels.find((ves) => ves.mmsi === mmsi);
-            if (v) setSelectedVessel(v);
+    <div className="relative w-screen h-screen overflow-hidden bg-[#03080D] select-none text-[#C9D6DF]">
+      {/* ── Background Lat/Long Grid & Scanline FX ── */}
+      <div 
+        className="absolute inset-0 pointer-events-none z-10 opacity-[0.03]"
+        style={{
+          backgroundImage: 'linear-gradient(rgba(34, 211, 238, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(34, 211, 238, 0.2) 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+        }}
+      />
+      <div 
+        className="absolute inset-0 pointer-events-none z-10 opacity-[0.04]"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, #000, #000 2px, transparent 2px, transparent 4px)',
+        }}
+      />
+
+      {/* ── Top HUD Header ── */}
+      <HudBar
+        onOpenCommand={() => {
+          setIsCommandOpen(true);
+          playHudBeep(1200, 'sine', 0.05);
+        }}
+        activeIncidentCount={getActiveIncidentCount()}
+      />
+
+      {/* ── Main Map Canvas (Full Viewport) ── */}
+      <main className="absolute inset-0 z-0 pt-12">
+        <MapView
+          incidents={incidents}
+          vessels={allVessels}
+          clusters={clusters}
+          showClusters={showClusters}
+          selectedIncidentId={selectedIncident?.id || null}
+          selectedVesselMmsi={selectedVesselMmsi}
+          onSelectIncident={handleSelectIncident}
+          onSelectVessel={handleSelectVessel}
+        />
+      </main>
+
+      {/* ── Bottom-Left: 48H Predictive Threat Windows ── */}
+      <ThreatWindows windows={threatWindows} />
+
+      {/* ── Bottom-Right: ML Cluster Overlay Toggle ── */}
+      <div
+        className="transition-all duration-300"
+        style={{
+          position: 'fixed',
+          bottom: 16,
+          right: rightDockCollapsed ? 24 : 440,
+          zIndex: 40,
+        }}
+      >
+        <ClusterOverlay
+          clusters={clusters}
+          showClusters={showClusters}
+          onToggle={() => {
+            setShowClusters((prev) => !prev);
+            playHudBeep(750, 'sine', 0.04);
+          }}
+          activeClusterId={activeClusterId}
+          onSelectCluster={(id) => {
+            setActiveClusterId(id);
+            if (id) {
+              const clu = clusters.find((c) => c.id === id);
+              if (clu && clu.incidentIds.length > 0) {
+                const firstInc = incidents.find((i) => i.id === clu.incidentIds[0]);
+                if (firstInc) handleSelectIncident(firstInc);
+              }
+            }
           }}
         />
-      )}
+      </div>
 
-      {/* 2. Tactical Live Map View */}
-      {activePage === 'map' && (
-        <MapPage
-          incidents={currentIncidents}
-          vessels={currentVessels}
-          liveVessels={currentVessels}
-          riskZones={currentRiskZones}
-          loading={false}
-          onSelectVessel={(v) => setSelectedVessel(v)}
-          onSelectIncident={(i) => setSelectedIncident(i)}
-        />
-      )}
+      {/* ── Right Dock: Feed ↔ Dossier Investigation Panel ── */}
+      <RightDock
+        incidents={incidents}
+        vessels={allVessels}
+        clusters={clusters}
+        selectedIncident={selectedIncident}
+        collapsed={rightDockCollapsed}
+        onToggleCollapse={() => setRightDockCollapsed((prev) => !prev)}
+        onSelectIncident={handleSelectIncident}
+        onDeselectIncident={handleDeselectIncident}
+        onHighlightVessel={(mmsi) => {
+          setSelectedVesselMmsi(mmsi);
+          playHudBeep(850, 'sine', 0.05);
+        }}
+      />
 
-      {/* 3. Incidents Log View */}
-      {activePage === 'incidents' && (
-        <IncidentsPage
-          incidents={currentIncidents}
-          vessels={currentVessels}
-          loading={false}
-          onRefresh={refetchIncidents}
-          onCreateIncident={(payload) => createIncidentMutation.mutate(payload)}
-          onSelectVesselMmsi={(mmsi) => {
-            const v = currentVessels.find((ves) => ves.mmsi === mmsi);
-            if (v) setSelectedVessel(v);
-          }}
-          onNavigateMap={() => setActivePage('map')}
-        />
-      )}
-
-      {/* 4. Vessel Tracker View */}
-      {activePage === 'vessels' && (
-        <VesselsPage
-          vessels={currentVessels}
-          alerts={activeAlerts}
-          loading={false}
-          onSelectIncidentId={(id) => {
-            const inc = currentIncidents.find((i) => i.id === id);
-            if (inc) setSelectedIncident(inc);
-          }}
-          onNavigateMap={() => setActivePage('map')}
-        />
-      )}
-
-      {/* 5. Alerts View */}
-      {activePage === 'alerts' && (
-        <AlertsPage
-          alerts={activeAlerts}
-          loading={false}
-          onMarkRead={handleMarkAlertRead}
-          onMarkAllRead={handleMarkAllAlertsRead}
-          onClearResolved={handleClearResolvedAlerts}
-          onSelectVesselMmsi={(mmsi) => {
-            const v = currentVessels.find((ves) => ves.mmsi === mmsi);
-            if (v) setSelectedVessel(v);
-          }}
-        />
-      )}
-
-      {/* 6. Analytics View */}
-      {activePage === 'analytics' && (
-        <AnalyticsPage
-          incidents={currentIncidents}
-          riskZones={currentRiskZones}
-        />
-      )}
-
-      {/* 7. Alert Rules View */}
-      {activePage === 'rules' && (
-        <AlertRulesPage />
-      )}
-
-      {/* Spotlight Command Palette (Cmd+K) */}
+      {/* ── ⌘K Command Palette ── */}
       <CommandPalette
         isOpen={isCommandOpen}
         onClose={() => setIsCommandOpen(false)}
-        onNavigate={setActivePage}
-        vessels={currentVessels}
-        incidents={currentIncidents}
-        onSelectVessel={(v) => setSelectedVessel(v)}
-        onSelectIncident={(i) => setSelectedIncident(i)}
-        onOpenReportIncident={() => setIsReportOpen(true)}
-      />
-
-      {/* 480px Vessel Detail Slide-Over */}
-      <VesselDetailDrawer
-        vessel={selectedVessel}
-        isOpen={Boolean(selectedVessel)}
-        onClose={() => setSelectedVessel(null)}
-        alerts={activeAlerts}
-        onSelectIncident={(id) => {
-          setSelectedVessel(null);
-          const inc = currentIncidents.find((i) => i.id === id);
+        vessels={allVessels}
+        incidents={incidents}
+        onSelectVessel={(mmsi) => {
+          setSelectedVesselMmsi(mmsi);
+          const inc = incidents.find((i) => i.linkedVessels.includes(mmsi));
           if (inc) setSelectedIncident(inc);
         }}
-        onOpenAlertRule={() => {
-          setSelectedVessel(null);
-          setActivePage('rules');
+        onSelectIncident={(id) => {
+          const inc = incidents.find((i) => i.id === id);
+          if (inc) handleSelectIncident(inc);
         }}
       />
 
-      {/* Global Incident Detail Modal */}
-      <IncidentDetailModal
-        incident={selectedIncident}
-        isOpen={Boolean(selectedIncident)}
-        onClose={() => setSelectedIncident(null)}
-        onSelectVessel={(name) => {
-          setSelectedIncident(null);
-          const v = currentVessels.find((ves) => ves.name === name);
-          if (v) setSelectedVessel(v);
-        }}
-        onTrackOnMap={() => {
-          setSelectedIncident(null);
-          setActivePage('map');
-        }}
-      />
-
-      {/* Global Report Incident Modal */}
-      <ReportIncidentModal
-        isOpen={isReportOpen}
-        onClose={() => setIsReportOpen(false)}
-        vessels={currentVessels}
-        onSubmitIncident={(payload) => {
-          createIncidentMutation.mutate(payload);
-          refetchIncidents();
-        }}
-      />
-    </AppLayout>
+      {/* ── Stream Status Pill (Top Right, sub-header) ── */}
+      <div className="fixed top-14 left-5 z-40 pointer-events-none">
+        <div className="px-2.5 py-1 rounded bg-[#08141C]/85 border border-[#0E2A38] backdrop-blur flex items-center gap-2 text-[10px] font-mono">
+          <span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{
+              backgroundColor: isConnected ? '#22D3EE' : '#F59E0B',
+              boxShadow: isConnected ? '0 0 8px #22D3EE' : 'none',
+            }}
+          />
+          <span className="text-[#5E7A8A]">TELEMETRY:</span>
+          <span className="text-[#C9D6DF] uppercase">
+            {isConnected ? (isSimulated ? 'AIS STREAM SIMULATED' : 'AISSTREAM.IO LIVE') : 'OFFLINE'}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }

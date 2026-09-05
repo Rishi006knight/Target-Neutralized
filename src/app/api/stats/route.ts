@@ -1,11 +1,27 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { mockStats } from '@/lib/mock-data';
+import {
+  seedIncidents,
+  seedVessels,
+  seedAlerts,
+  getActiveIncidentCount,
+  getDarkVesselCount,
+  getGlobalThreatScore,
+} from '@/lib/mock-data';
 
 export async function GET() {
+  const fallbackStats = {
+    vesselsWatched: seedVessels.length,
+    activeIncidents: getActiveIncidentCount(),
+    darkVessels24h: getDarkVesselCount(),
+    highRiskZones: 6,
+    lastSatellitePass: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
+    unreadAlerts: seedAlerts.filter(a => !a.isRead).length,
+    globalThreatScore: getGlobalThreatScore(),
+  };
+
   try {
     const vesselsWatched = await db.vessel.count();
-
     const activeIncidents = await db.incident.count({
       where: {
         severity: { in: ['critical', 'high'] },
@@ -31,7 +47,7 @@ export async function GET() {
     });
     const lastSatellitePass = latestDetection
       ? latestDetection.capturedAt.toISOString()
-      : new Date(Date.now() - 4 * 60 * 1000).toISOString();
+      : fallbackStats.lastSatellitePass;
 
     const unreadAlerts = await db.alert.count({
       where: {
@@ -40,7 +56,7 @@ export async function GET() {
     });
 
     if (vesselsWatched === 0 && activeIncidents === 0) {
-      return NextResponse.json(mockStats);
+      return NextResponse.json(fallbackStats);
     }
 
     return NextResponse.json({
@@ -50,9 +66,9 @@ export async function GET() {
       highRiskZones,
       lastSatellitePass,
       unreadAlerts,
+      globalThreatScore: getGlobalThreatScore(),
     });
-  } catch (error) {
-    console.warn('DB offline, returning fallback mock stats:', error);
-    return NextResponse.json(mockStats);
+  } catch {
+    return NextResponse.json(fallbackStats);
   }
 }

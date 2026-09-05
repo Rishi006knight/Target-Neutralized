@@ -1,18 +1,27 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { Providers } from '@/components/Providers';
 import './globals.css';
 
-const inter = Inter({
+const plexSans = IBM_Plex_Sans({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['400', '600', '700'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-mono',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'OceanShield OPS — Maritime Piracy Monitor',
+  title: 'OCEANSHIELD 2.0 — Abyssal Threat Console',
   description:
-    'Real-time vessel tracking and anomaly detection system for maritime piracy monitoring. Powered by AIS data, ML-driven threat analysis, and SAR satellite imagery.',
-  keywords: ['maritime', 'piracy', 'AIS', 'vessel tracking', 'anomaly detection', 'SAR'],
+    'Map-first maritime piracy investigation console. Real-time incident tracking, vessel AIS monitoring, ML threat correlation, and predictive risk windows.',
+  keywords: ['maritime', 'piracy', 'threat', 'investigation', 'AIS', 'UKMTO', 'ReCAAP'],
 };
 
 export default function RootLayout({
@@ -22,7 +31,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased bg-slate-950 text-slate-200`}>
+      <body
+        className={`${plexSans.variable} ${plexMono.variable} font-sans antialiased`}
+        style={{ backgroundColor: '#03080D', color: '#C9D6DF' }}
+      >
         <Providers>
           {children}
         </Providers>
